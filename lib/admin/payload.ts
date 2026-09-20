@@ -28,6 +28,7 @@ export function parseCreationFormData(formData: FormData): {
   if (entries.length > 20) throw new Error('A maximum of 20 images can be uploaded at once.');
   const images = entries.map((entry) => {
     if (!(entry instanceof File)) throw new Error('Images must be uploaded as files.');
+    if (!entry.type.startsWith('image/')) throw new Error('Only image files are allowed.');
     return entry;
   });
 
@@ -36,7 +37,6 @@ export function parseCreationFormData(formData: FormData): {
   const bbmodel = sourceEntries[0] instanceof File ? sourceEntries[0] : undefined;
 
   const replaceCover = formData.get('replaceCover') === 'true';
-
   const originalIdEntry = formData.get('originalId');
   const originalId = typeof originalIdEntry === 'string' && originalIdEntry.trim() ? originalIdEntry.trim() : undefined;
 
