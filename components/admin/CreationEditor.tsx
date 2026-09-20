@@ -1,10 +1,11 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import type { Creation, CreationInput } from '@/lib/creations/types';
+import type { AdminCreation, Creation, CreationInput } from '@/lib/creations/types';
 import { slugify } from '@/lib/utils/slug';
 import { FeaturedControls } from './FeaturedControls';
 import { ImageField } from './ImageField';
+import { BbmodelField } from './BbmodelField';
 
 const PLACEHOLDER = '/models/_placeholder/creation-placeholder.svg';
 
@@ -13,7 +14,7 @@ function splitList(value: string): string[] {
 }
 
 type Props = {
-  creation?: Creation;
+  creation?: AdminCreation;
   categories: string[];
   onSaved?: (creation: Creation) => void;
   onCancel?: () => void;
@@ -36,6 +37,8 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
   const [notes, setNotes] = useState(creation?.notes ?? '');
   const [createdAt, setCreatedAt] = useState(creation?.createdAt ?? new Date().toISOString().slice(0, 10));
   const [files, setFiles] = useState<File[]>([]);
+  const [bbmodel, setBbmodel] = useState<File | null>(null);
+  const [replaceCover, setReplaceCover] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const datalistId = useMemo(() => `categories-${creation?.id ?? 'new'}`, [creation?.id]);
@@ -74,6 +77,8 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
     formData.set('payload', JSON.stringify(payload));
     if (creation) formData.set('originalId', creation.id);
     for (const image of files) formData.append('images', image);
+    if (bbmodel) formData.set('bbmodel', bbmodel);
+    if (creation && replaceCover) formData.set('replaceCover', 'true');
 
     try {
       const response = await fetch('/api/admin/creations', {
@@ -140,7 +145,22 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
       <ImageField
         files={files}
         onChange={setFiles}
-        existingImages={creation ? [...new Set([creation.coverImage, ...creation.images])].filter((image) => image !== PLACEHOLDER) : []}
+        existingImages={creation?.galleryImages ?? []}
+      />
+
+      {creation && files.length > 0 && (
+        <label className="admin-check admin-cover-choice">
+          <input type="checkbox" checked={replaceCover} onChange={(event) => setReplaceCover(event.target.checked)} />
+          <span><strong>Use first new render as cover</strong><small>The current cover stays in the gallery.</small></span>
+        </label>
+      )}
+
+      <BbmodelField
+        creationId={creation?.id}
+        existing={creation?.bbmodel}
+        file={bbmodel}
+        onChange={setBbmodel}
+        onRemoved={() => window.location.reload()}
       />
 
       <label className="admin-field">
