@@ -2,8 +2,11 @@ import { randomUUID } from 'node:crypto';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_BBMODEL_BYTES = 50 * 1024 * 1024;
+const MAX_VIEWER_BYTES = 50 * 1024 * 1024;
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/avif']);
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'avif']);
+
+type ManagedBucket = 'portfolio-renders' | 'bbmodels' | 'viewer-models';
 
 export type UploadFile = Pick<File, 'name' | 'type' | 'size'> & Blob;
 
@@ -22,8 +25,7 @@ function leafName(name: string): string {
 }
 
 function sourceStem(name: string): string {
-  const leaf = leafName(name);
-  return leaf.replace(/\.bbmodel$/i, '');
+  return leafName(name).replace(/\.bbmodel$/i, '');
 }
 
 export function safeBbmodelFilename(originalName: string): string {
@@ -38,11 +40,15 @@ export function safeBbmodelFilename(originalName: string): string {
 }
 
 export function validateBbmodelFile(file: Pick<File, 'name' | 'size'>): void {
-  if (!/\.bbmodel$/i.test(leafName(file.name))) {
-    throw new Error('Blockbench source must use the .bbmodel extension.');
-  }
+  if (!/\.bbmodel$/i.test(leafName(file.name))) throw new Error('Blockbench source must use the .bbmodel extension.');
   if (file.size <= 0) throw new Error('The .bbmodel file is empty.');
   if (file.size > MAX_BBMODEL_BYTES) throw new Error('The .bbmodel file must be 50 MB or smaller.');
+}
+
+export function validateViewerFile(file: Pick<File, 'name' | 'type' | 'size'>): void {
+  if (!/\.glb$/i.test(leafName(file.name))) throw new Error('Viewer model must use the .glb extension.');
+  if (file.size <= 0) throw new Error('The viewer GLB is empty.');
+  if (file.size > MAX_VIEWER_BYTES) throw new Error('The viewer GLB must be 50 MB or smaller.');
 }
 
 export function validateImageFile(file: Pick<File, 'name' | 'type' | 'size'>): void {
@@ -78,12 +84,12 @@ export function bbmodelObjectPath(creationId: string, file: Pick<File, 'name'>):
   return `${creationId}/${randomUUID()}-${safeBbmodelFilename(file.name)}`;
 }
 
-export async function uploadRender(
-  client: StorageClientLike,
-  creationId: string,
-  file: File,
-  kind: 'cover' | 'gallery',
-): Promise<string> {
+export function viewerObjectPath(creationId: string): string {
+  assertCreationId(creationId);
+  return `${creationId}/${randomUUID()}.glb`;
+}
+
+export async function uploadRender(client: StorageClientLike, creationId: string, file: File, kind: 'cover' | 'gallery'): Promise<string> {
   validateImageFile(file);
   const path = renderObjectPath(creationId, file, kind);
   const { error } = await client.storage.from('portfolio-renders').upload(path, file, {
@@ -106,29 +112,30 @@ export async function uploadBbmodel(client: StorageClientLike, creationId: strin
   return path;
 }
 
-export async function removeObjects(client: StorageClientLike, bucket: 'portfolio-renders' | 'bbmodels', paths: string[]): Promise<void> {
+export async function uploadViewerModel(client: StorageClientLike, creationId: string, file: File): Promise<string> {
+  validateViewerFile(file);
+  const path = viewerObjectPath(creationId);
+  const { error } = await client.storage.from('viewer-models').upload(path, file, {
+    contentType: 'model/gltf-binary',
+    cacheControl: '31536000',
+    upsert: false,
+  });
+  if (error) throw new Error(error.message || 'Could not upload viewer GLB.');
+  return path;
+}
+
+export async function removeObjects(client: StorageClientLike, bucket: ManagedBucket, paths: string[]): Promise<void> {
   const unique = [...new Set(paths.filter(Boolean))];
   if (unique.length === 0) return;
   const { error } = await client.storage.from(bucket).remove(unique);
   if (error) throw new Error(error.message || `Could not remove ${bucket} objects.`);
 }
 
+export type StorageObjectGroup = { bucket: ManagedBucket; paths: string[] };
 
-export type StorageObjectGroup = {
-  bucket: 'portfolio-renders' | 'bbmodels';
-  paths: string[];
-};
-
-export async function removeObjectGroups(
-  client: StorageClientLike,
-  groups: StorageObjectGroup[],
-): Promise<string[]> {
-  const results = await Promise.allSettled(
-    groups.map(({ bucket, paths }) => removeObjects(client, bucket, paths)),
-  );
-
-  return results.flatMap((result) => {
-    if (result.status === 'fulfilled') return [];
-    return [result.reason instanceof Error ? result.reason.message : 'Remote file cleanup failed.'];
-  });
+export async function removeObjectGroups(client: StorageClientLike, groups: StorageObjectGroup[]): Promise<string[]> {
+  const results = await Promise.allSettled(groups.map(({ bucket, paths }) => removeObjects(client, bucket, paths)));
+  return results.flatMap((result) => result.status === 'fulfilled'
+    ? []
+    : [result.reason instanceof Error ? result.reason.message : 'Remote file cleanup failed.']);
 }
