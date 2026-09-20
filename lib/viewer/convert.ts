@@ -1,3 +1,4 @@
+import type { AnimationClip, BufferGeometry, Object3D, SkinnedMesh } from 'three';
 import { normalizeViewerAnimationNames } from './animation';
 
 const MAX_BBMODEL_BYTES = 50 * 1024 * 1024;
@@ -34,6 +35,95 @@ function readFileAsText(file: File): Promise<string> {
   });
 }
 
+function stripBlockbenchMetadata(scene: Object3D, animations: AnimationClip[]): void {
+  scene.traverse((object) => {
+    for (const key of Object.keys(object.userData)) {
+      if (key.toLowerCase().startsWith('blockbench')) {
+        delete object.userData[key];
+      }
+    }
+  });
+
+  for (const clip of animations) {
+    for (const key of Object.keys(clip.userData)) {
+      if (key.toLowerCase().startsWith('blockbench')) {
+        delete clip.userData[key];
+      }
+    }
+  }
+}
+
+function geometryPrimitiveCount(geometry: BufferGeometry): number {
+  return geometry.index?.count ?? geometry.getAttribute('position')?.count ?? 0;
+}
+
+async function compactSkinnedMeshes(scene: Object3D): Promise<BufferGeometry | undefined> {
+  const [THREE, { mergeGeometries }] = await Promise.all([
+    import('three'),
+    import('three/examples/jsm/utils/BufferGeometryUtils.js'),
+  ]);
+
+  const allMeshes: SkinnedMesh[] = [];
+  scene.traverse((object) => {
+    if ((object as SkinnedMesh).isSkinnedMesh) {
+      allMeshes.push(object as SkinnedMesh);
+    }
+  });
+
+  const meshes = allMeshes.filter((mesh) => mesh.visible);
+  if (meshes.length <= 1) return undefined;
+
+  const first = meshes[0];
+  const sameSkeleton = meshes.every((mesh) => mesh.skeleton === first.skeleton);
+  const sameMaterials = meshes.every((mesh) => mesh.material === first.material);
+
+  if (!sameSkeleton || !sameMaterials) {
+    return undefined;
+  }
+
+  const geometries = meshes.map((mesh) => mesh.geometry);
+  const mergedGeometry = mergeGeometries(geometries, false);
+
+  if (!mergedGeometry) {
+    throw new Error('Could not compact Blockbench geometry for the web viewer.');
+  }
+
+  mergedGeometry.clearGroups();
+
+  let primitiveOffset = 0;
+  for (const geometry of geometries) {
+    const primitiveCount = geometryPrimitiveCount(geometry);
+
+    if (geometry.groups.length > 0) {
+      for (const group of geometry.groups) {
+        const start = primitiveOffset + group.start;
+        const count = Math.min(group.count, Math.max(0, primitiveCount - group.start));
+        if (count > 0) {
+          mergedGeometry.addGroup(start, count, group.materialIndex ?? 0);
+        }
+      }
+    } else if (primitiveCount > 0) {
+      mergedGeometry.addGroup(primitiveOffset, primitiveCount, 0);
+    }
+
+    primitiveOffset += primitiveCount;
+  }
+
+  const mergedMesh = new THREE.SkinnedMesh(mergedGeometry, first.material);
+  mergedMesh.name = 'viewer-model';
+  mergedMesh.bindMode = first.bindMode;
+  mergedMesh.bind(first.skeleton, first.bindMatrix.clone());
+
+  for (const mesh of allMeshes) {
+    mesh.removeFromParent();
+  }
+
+  scene.add(mergedMesh);
+  scene.updateMatrixWorld(true);
+
+  return mergedGeometry;
+}
+
 async function defaultDependencies(): Promise<ViewerConverterDependencies> {
   const [{ BBModelLoader }, { GLTFExporter }] = await Promise.all([
     import('three-blockbench'),
@@ -49,14 +139,23 @@ async function defaultDependencies(): Promise<ViewerConverterDependencies> {
         strict: false,
         loadTextures: true,
       });
+
       const model = await loader.parseAsync(source, '');
+
+      const compactedGeometry = await compactSkinnedMeshes(model.scene);
+      stripBlockbenchMetadata(model.scene, model.animations);
+
       return {
         scene: model.scene,
         animations: model.animations,
         warnings: model.warnings,
-        dispose: () => model.dispose(),
+        dispose: () => {
+          compactedGeometry?.dispose();
+          model.dispose();
+        },
       };
     },
+
     async exportBinary(scene, animations) {
       const exporter = new GLTFExporter();
       const result = await exporter.parseAsync(scene as never, {
@@ -64,9 +163,11 @@ async function defaultDependencies(): Promise<ViewerConverterDependencies> {
         animations: animations as never[],
         onlyVisible: true,
       });
+
       if (!(result instanceof ArrayBuffer)) {
         throw new Error('Viewer conversion did not produce a binary GLB.');
       }
+
       return result;
     },
   };
@@ -81,6 +182,7 @@ export async function convertBbmodelToViewer(
   if (file.size > MAX_BBMODEL_BYTES) throw new Error('The .bbmodel file must be 50 MB or smaller.');
 
   const source = await readFileAsText(file);
+
   try {
     JSON.parse(source);
   } catch {
@@ -92,9 +194,11 @@ export async function convertBbmodelToViewer(
 
   try {
     const binary = await deps.exportBinary(parsed.scene, parsed.animations);
+
     if (binary.byteLength > MAX_VIEWER_BYTES) {
       throw new Error('Generated viewer model is larger than 50 MB.');
     }
+
     return {
       file: new File([binary], 'model.glb', { type: 'model/gltf-binary' }),
       animationNames: normalizeViewerAnimationNames(parsed.animations.map((clip) => clip.name)),
