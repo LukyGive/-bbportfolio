@@ -8,30 +8,19 @@ type MaybeSingleResult = {
   error?: unknown;
 };
 
-type AdminCheckClient = {
-  auth: { getClaims(): PromiseLike<ClaimsResult> };
-  from(table: 'admin_users'): {
-    select(columns: 'user_id'): {
-      eq(column: 'user_id', value: string): {
-        maybeSingle(): PromiseLike<MaybeSingleResult>;
-      };
-    };
-  };
+type AdminCheckOperations = {
+  getClaims(): PromiseLike<ClaimsResult>;
+  lookupAdmin(userId: string): PromiseLike<MaybeSingleResult>;
 };
 
 export type AdminCheck = { ok: true; userId: string } | { ok: false };
 
-export async function checkAdminWithClient(client: AdminCheckClient): Promise<AdminCheck> {
-  const claimsResult = await client.auth.getClaims();
+export async function checkAdminWithOperations(operations: AdminCheckOperations): Promise<AdminCheck> {
+  const claimsResult = await operations.getClaims();
   const userId = claimsResult.error ? undefined : claimsResult.data?.claims?.sub;
   if (!userId) return { ok: false };
 
-  const { data, error } = await client
-    .from('admin_users')
-    .select('user_id')
-    .eq('user_id', userId)
-    .maybeSingle();
-
+  const { data, error } = await operations.lookupAdmin(userId);
   if (error || data?.user_id !== userId) return { ok: false };
   return { ok: true, userId };
 }
