@@ -23,6 +23,17 @@ function warningMessage(warning: { message?: string } | string): string {
   return typeof warning === 'string' ? warning : warning.message ?? 'Blockbench conversion warning';
 }
 
+function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === 'function') return file.text();
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read .bbmodel file.'));
+    reader.readAsText(file);
+  });
+}
+
 async function defaultDependencies(): Promise<ViewerConverterDependencies> {
   const [{ BBModelLoader }, { GLTFExporter }] = await Promise.all([
     import('three-blockbench'),
@@ -69,7 +80,7 @@ export async function convertBbmodelToViewer(
   if (file.size <= 0) throw new Error('The .bbmodel file is empty.');
   if (file.size > MAX_BBMODEL_BYTES) throw new Error('The .bbmodel file must be 50 MB or smaller.');
 
-  const source = await file.text();
+  const source = await readFileAsText(file);
   try {
     JSON.parse(source);
   } catch {

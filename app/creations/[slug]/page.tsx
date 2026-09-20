@@ -3,11 +3,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { CreationGallery } from '@/components/portfolio/CreationGallery';
 import { CreationMeta } from '@/components/portfolio/CreationMeta';
-import { ImageGallery } from '@/components/portfolio/ImageGallery';
+import { CreationVisuals } from '@/components/portfolio/CreationVisuals';
 import { getCreationBySlug, getPublishedCreations } from '@/lib/creations/public';
 import { getRelatedCreations } from '@/lib/creations/related';
 
 export const dynamic = 'force-dynamic';
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const creation = await getCreationBySlug(slug);
@@ -36,7 +37,7 @@ export default async function CreationPage({ params }: { params: Promise<{ slug:
       </header>
 
       <div className="detail-layout">
-        <ImageGallery creation={creation} />
+        <CreationVisuals creation={creation} />
         <CreationMeta creation={creation} />
       </div>
 
