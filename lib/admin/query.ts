@@ -24,6 +24,11 @@ export const ADMIN_CREATION_SELECT = `
   bbmodel_path,
   bbmodel_filename,
   bbmodel_size,
+  viewer_model_path,
+  viewer_status,
+  viewer_error,
+  viewer_updated_at,
+  viewer_animation_names,
   creation_images (
     id,
     creation_id,
