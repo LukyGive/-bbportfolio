@@ -9,11 +9,11 @@ type MaybeSingleResult = {
 };
 
 type AdminCheckClient = {
-  auth: { getClaims(): Promise<ClaimsResult> };
+  auth: { getClaims(): PromiseLike<ClaimsResult> };
   from(table: 'admin_users'): {
     select(columns: 'user_id'): {
       eq(column: 'user_id', value: string): {
-        maybeSingle(): Promise<MaybeSingleResult>;
+        maybeSingle(): PromiseLike<MaybeSingleResult>;
       };
     };
   };
