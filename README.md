@@ -85,3 +85,22 @@ npm run check
 ## Supabase schema
 
 Versioned SQL lives in `supabase/migrations/`. The migration creates `creations`, `creation_images`, `admin_users`, RLS policies, the public render bucket and the private `.bbmodel` bucket.
+
+## Large admin uploads
+
+Admin binaries do **not** pass through Next.js/Vercel Functions.
+
+1. `/api/admin/uploads/sign` authenticates the portfolio admin, validates file metadata, chooses immutable Storage paths, and returns signed upload tokens.
+2. The browser uploads render images, private `.bbmodel` sources, and generated viewer `.glb` files directly to Supabase Storage.
+3. Files up to 6 MiB use `uploadToSignedUrl`; larger files use resumable TUS uploads with 6 MiB chunks and the Supabase direct Storage hostname.
+4. `/api/admin/creations` and `/api/admin/viewer/[id]` receive JSON metadata only and finalize database pointers after Storage verification.
+5. New files use `uploads/<admin-user-id>/<upload-session-id>/...` paths. Replacements never overwrite the current object.
+6. If a replacement fails before database finalization, only the new session objects are removed. The previous working source/viewer pair stays active.
+
+Application limits remain:
+
+- render image: 10 MiB each, max 20 per save;
+- `.bbmodel`: 50 MiB;
+- viewer `.glb`: 50 MiB.
+
+The private source download route returns an authenticated short-lived signed redirect to Supabase. The `.bbmodel` bucket itself remains private and public portfolio queries never expose its Storage path.

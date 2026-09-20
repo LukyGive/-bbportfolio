@@ -1,19 +1,8 @@
 import { getAdminContext } from '@/lib/auth/server';
+import { parseViewerReplacementBody } from '@/lib/admin/payload';
 import { recordViewerError, replaceRemoteViewer } from '@/lib/admin/remote';
-import { validateViewerFile } from '@/lib/admin/files';
 
 export const runtime = 'nodejs';
-
-function parseAnimationNames(entry: FormDataEntryValue | null): string[] {
-  if (typeof entry !== 'string' || !entry.trim()) return [];
-  let parsed: unknown;
-  try { parsed = JSON.parse(entry); }
-  catch { throw new Error('Invalid viewer animation metadata.'); }
-  if (!Array.isArray(parsed) || parsed.some((name) => typeof name !== 'string')) {
-    throw new Error('Invalid viewer animation metadata.');
-  }
-  return [...new Set(parsed.map((name) => name.trim()).filter(Boolean))];
-}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const context = await getAdminContext();
@@ -21,14 +10,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const { id } = await params;
-    const formData = await request.formData();
-    const file = formData.get('viewerModel');
-    if (!(file instanceof File) || file.size <= 0) {
-      return Response.json({ error: 'Viewer GLB is required.' }, { status: 400 });
-    }
-    validateViewerFile(file);
-    const animationNames = parseAnimationNames(formData.get('viewerAnimationNames'));
-    return Response.json({ ok: true, ...(await replaceRemoteViewer(context.client, id, { file, animationNames })) });
+    const body = await request.json().catch(() => null);
+    const viewer = parseViewerReplacementBody(body, context.userId);
+    return Response.json({
+      ok: true,
+      ...(await replaceRemoteViewer(context.client, context.userId, id, viewer)),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Could not regenerate viewer.';
     return Response.json({ error: message }, { status: /not found|no \.bbmodel/i.test(message) ? 404 : 400 });

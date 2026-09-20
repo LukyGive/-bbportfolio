@@ -20,7 +20,8 @@
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.116.0",
     "three": "0.186.0",
-    "three-blockbench": "0.1.0"
+    "three-blockbench": "0.1.0",
+    "tus-js-client": "4.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
@@ -30,13 +31,13 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/three": "0.186.0",
     "@vitejs/plugin-react": "^5.0.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "16.3.3",
     "jsdom": "^26.0.0",
     "typescript": "^5.8.0",
-    "vitest": "^3.2.0"
+    "vitest": "^3.2.0",
+    "@types/three": "0.186.0"
   },
   "engines": {
     "node": "22.x"

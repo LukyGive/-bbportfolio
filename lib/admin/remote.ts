@@ -4,25 +4,18 @@ import type { AdminCreation, CreationInput } from '@/lib/creations/types';
 import { mapAdminCreation, type CreationRowWithImages } from '@/lib/creations/mapper';
 import { ADMIN_CREATION_SELECT } from './query';
 import { normalizeCreationInput } from './creations';
+import type { CreationUploads, UploadedAssetRef, UploadedViewerRef } from './upload-contracts';
 import {
+  cleanupUploadedRefs,
   removeObjectGroups,
   removeObjects,
   safeBbmodelFilename,
-  uploadBbmodel,
-  uploadRender,
-  uploadViewerModel,
-  validateBbmodelFile,
-  validateImageFile,
-  validateViewerFile,
+  verifyUploadedObject,
+  verifyCreationUploads,
   type StorageClientLike,
 } from './files';
 
 type Client = SupabaseClient<Database>;
-
-export type ViewerUpload = {
-  file: File;
-  animationNames: string[];
-};
 
 type MutationResult = {
   creation?: AdminCreation;
@@ -43,7 +36,15 @@ async function loadAdminCreation(client: Client, id: string): Promise<CreationRo
   return data as unknown as CreationRowWithImages;
 }
 
-async function cleanupNewUploads(
+function uploadRefs(uploads: CreationUploads): UploadedAssetRef[] {
+  return [
+    ...uploads.renders,
+    ...(uploads.bbmodel ? [uploads.bbmodel] : []),
+    ...(uploads.viewer ? [uploads.viewer] : []),
+  ];
+}
+
+async function cleanupStoredPaths(
   client: Client,
   renderPaths: string[],
   sourcePath?: string,
@@ -58,37 +59,30 @@ async function cleanupNewUploads(
 
 export async function createRemoteCreation(
   client: Client,
+  userId: string,
   input: CreationInput,
-  images: File[],
-  bbmodel?: File,
-  viewer?: ViewerUpload,
+  uploads: CreationUploads,
 ): Promise<MutationResult> {
-  const normalized = normalizeCreationInput(input);
-  images.forEach(validateImageFile);
-  if (bbmodel) validateBbmodelFile(bbmodel);
-  if (viewer) validateViewerFile(viewer.file);
-  if (bbmodel && !viewer) throw new Error('A generated viewer GLB is required with a .bbmodel source.');
-
-  const { data: inserted, error: insertError } = await client.from('creations').insert(normalized).select('id').single();
-  if (insertError || !inserted) throw dbError('Could not create creation', insertError);
-
-  const id = inserted.id;
   const storageClient = client as unknown as StorageClientLike;
-  const uploadedRenders: string[] = [];
-  let uploadedSource: string | undefined;
-  let uploadedViewer: string | undefined;
+  let id: string | undefined;
 
   try {
-    for (const image of images) {
-      uploadedRenders.push(await uploadRender(storageClient, id, image, uploadedRenders.length === 0 ? 'cover' : 'gallery'));
-    }
-    if (bbmodel) uploadedSource = await uploadBbmodel(storageClient, id, bbmodel);
-    if (viewer) uploadedViewer = await uploadViewerModel(storageClient, id, viewer.file);
+    const normalized = normalizeCreationInput(input);
+    await verifyCreationUploads(storageClient, userId, uploads);
 
-    if (uploadedRenders.length > 0) {
-      const galleryRows = uploadedRenders.map((storagePath, index) => ({
-        creation_id: id,
-        storage_path: storagePath,
+    const { data: inserted, error: insertError } = await client
+      .from('creations')
+      .insert(normalized)
+      .select('id')
+      .single();
+    if (insertError || !inserted) throw dbError('Could not create creation', insertError);
+    const createdId = inserted.id;
+    id = createdId;
+
+    if (uploads.renders.length > 0) {
+      const galleryRows = uploads.renders.map((render, index) => ({
+        creation_id: createdId,
+        storage_path: render.path,
         alt_text: normalized.name,
         sort_order: index,
       }));
@@ -98,66 +92,56 @@ export async function createRemoteCreation(
 
     const now = new Date().toISOString();
     const attachmentUpdate: Database['public']['Tables']['creations']['Update'] = {
-      cover_image_path: uploadedRenders[0] ?? null,
-      ...(bbmodel && uploadedSource ? {
-        bbmodel_path: uploadedSource,
-        bbmodel_filename: safeBbmodelFilename(bbmodel.name),
-        bbmodel_size: bbmodel.size,
+      cover_image_path: uploads.renders[0]?.path ?? null,
+      ...(uploads.bbmodel ? {
+        bbmodel_path: uploads.bbmodel.path,
+        bbmodel_filename: safeBbmodelFilename(uploads.bbmodel.filename),
+        bbmodel_size: uploads.bbmodel.size,
       } : {}),
-      ...(viewer && uploadedViewer ? {
-        viewer_model_path: uploadedViewer,
+      ...(uploads.viewer ? {
+        viewer_model_path: uploads.viewer.path,
         viewer_status: 'ready',
         viewer_error: null,
         viewer_updated_at: now,
-        viewer_animation_names: viewer.animationNames,
+        viewer_animation_names: uploads.viewer.animationNames,
       } : {}),
       updated_at: now,
     };
-    const { error: updateError } = await client.from('creations').update(attachmentUpdate).eq('id', id);
+    const { error: updateError } = await client.from('creations').update(attachmentUpdate).eq('id', createdId);
     if (updateError) throw dbError('Could not attach uploaded files', updateError);
 
-    return { creation: mapAdminCreation(await loadAdminCreation(client, id)) };
+    return { creation: mapAdminCreation(await loadAdminCreation(client, createdId)) };
   } catch (error) {
-    await cleanupNewUploads(client, uploadedRenders, uploadedSource, uploadedViewer);
-    await client.from('creations').delete().eq('id', id);
+    if (id) {
+      try { await client.from('creations').delete().eq('id', id); } catch { /* best-effort rollback */ }
+    }
+    await cleanupUploadedRefs(storageClient, userId, uploadRefs(uploads)).catch(() => undefined);
     throw error;
   }
 }
 
 export async function updateRemoteCreation(
   client: Client,
+  userId: string,
   id: string,
   input: CreationInput,
-  images: File[],
-  bbmodel?: File,
-  viewer?: ViewerUpload,
+  uploads: CreationUploads,
   replaceCover = false,
 ): Promise<MutationResult> {
-  const current = await loadAdminCreation(client, id);
-  const normalized = normalizeCreationInput({ ...input, createdAt: input.createdAt ?? current.created_at });
-  images.forEach(validateImageFile);
-  if (bbmodel) validateBbmodelFile(bbmodel);
-  if (viewer) validateViewerFile(viewer.file);
-  if (bbmodel && !viewer) throw new Error('A generated viewer GLB is required with a .bbmodel source.');
-
   const storageClient = client as unknown as StorageClientLike;
-  const uploadedRenders: string[] = [];
-  let uploadedSource: string | undefined;
-  let uploadedViewer: string | undefined;
   let insertedImageIds: string[] = [];
+  let current: CreationRowWithImages | undefined;
 
   try {
-    for (const image of images) {
-      uploadedRenders.push(await uploadRender(storageClient, id, image, current.cover_image_path || uploadedRenders.length > 0 ? 'gallery' : 'cover'));
-    }
-    if (bbmodel) uploadedSource = await uploadBbmodel(storageClient, id, bbmodel);
-    if (viewer) uploadedViewer = await uploadViewerModel(storageClient, id, viewer.file);
+    current = await loadAdminCreation(client, id);
+    const normalized = normalizeCreationInput({ ...input, createdAt: input.createdAt ?? current.created_at });
+    await verifyCreationUploads(storageClient, userId, uploads);
 
-    if (uploadedRenders.length > 0) {
+    if (uploads.renders.length > 0) {
       const baseOrder = Math.max(-1, ...(current.creation_images ?? []).map((image) => image.sort_order)) + 1;
-      const rows = uploadedRenders.map((storagePath, index) => ({
+      const rows = uploads.renders.map((render, index) => ({
         creation_id: id,
-        storage_path: storagePath,
+        storage_path: render.path,
         alt_text: normalized.name,
         sort_order: baseOrder + index,
       }));
@@ -169,91 +153,53 @@ export async function updateRemoteCreation(
     const now = new Date().toISOString();
     const update: Database['public']['Tables']['creations']['Update'] = {
       ...normalized,
-      cover_image_path: replaceCover && uploadedRenders[0]
-        ? uploadedRenders[0]
-        : current.cover_image_path ?? uploadedRenders[0] ?? null,
+      cover_image_path: replaceCover && uploads.renders[0]
+        ? uploads.renders[0].path
+        : current.cover_image_path ?? uploads.renders[0]?.path ?? null,
       updated_at: now,
-      ...(bbmodel && uploadedSource ? {
-        bbmodel_path: uploadedSource,
-        bbmodel_filename: safeBbmodelFilename(bbmodel.name),
-        bbmodel_size: bbmodel.size,
+      ...(uploads.bbmodel ? {
+        bbmodel_path: uploads.bbmodel.path,
+        bbmodel_filename: safeBbmodelFilename(uploads.bbmodel.filename),
+        bbmodel_size: uploads.bbmodel.size,
       } : {}),
-      ...(viewer && uploadedViewer ? {
-        viewer_model_path: uploadedViewer,
+      ...(uploads.viewer ? {
+        viewer_model_path: uploads.viewer.path,
         viewer_status: 'ready',
         viewer_error: null,
         viewer_updated_at: now,
-        viewer_animation_names: viewer.animationNames,
+        viewer_animation_names: uploads.viewer.animationNames,
       } : {}),
     };
     const { error: updateError } = await client.from('creations').update(update).eq('id', id);
     if (updateError) throw dbError('Could not update creation', updateError);
-
-    const cleanupWarnings: string[] = [];
-    if (bbmodel && uploadedSource && current.bbmodel_path && current.bbmodel_path !== uploadedSource) {
-      try { await removeObjects(storageClient, 'bbmodels', [current.bbmodel_path]); }
-      catch (error) { cleanupWarnings.push(error instanceof Error ? error.message : 'Old .bbmodel cleanup failed.'); }
-    }
-    if (viewer && uploadedViewer && current.viewer_model_path && current.viewer_model_path !== uploadedViewer) {
-      try { await removeObjects(storageClient, 'viewer-models', [current.viewer_model_path]); }
-      catch (error) { cleanupWarnings.push(error instanceof Error ? error.message : 'Old viewer cleanup failed.'); }
-    }
-
-    return {
-      creation: mapAdminCreation(await loadAdminCreation(client, id)),
-      ...(cleanupWarnings.length ? { cleanupWarning: cleanupWarnings.join(' ') } : {}),
-    };
   } catch (error) {
-    if (insertedImageIds.length) await client.from('creation_images').delete().in('id', insertedImageIds);
-    await cleanupNewUploads(client, uploadedRenders, uploadedSource, uploadedViewer);
-    throw error;
-  }
-}
-
-export async function replaceRemoteViewer(client: Client, id: string, viewer: ViewerUpload): Promise<MutationResult> {
-  validateViewerFile(viewer.file);
-  const current = await loadAdminCreation(client, id);
-  if (!current.bbmodel_path) throw new Error('No .bbmodel attached.');
-  const storageClient = client as unknown as StorageClientLike;
-  const uploadedViewer = await uploadViewerModel(storageClient, id, viewer.file);
-
-  try {
-    const { error } = await client.from('creations').update({
-      viewer_model_path: uploadedViewer,
-      viewer_status: 'ready',
-      viewer_error: null,
-      viewer_updated_at: new Date().toISOString(),
-      viewer_animation_names: viewer.animationNames,
-      updated_at: new Date().toISOString(),
-    }).eq('id', id);
-    if (error) throw dbError('Could not update viewer', error);
-  } catch (error) {
-    await removeObjects(storageClient, 'viewer-models', [uploadedViewer]).catch(() => undefined);
+    if (insertedImageIds.length) {
+      try { await client.from('creation_images').delete().in('id', insertedImageIds); } catch { /* best-effort rollback */ }
+    }
+    await cleanupUploadedRefs(storageClient, userId, uploadRefs(uploads)).catch(() => undefined);
     throw error;
   }
 
-  let cleanupWarning: string | undefined;
-  if (current.viewer_model_path && current.viewer_model_path !== uploadedViewer) {
-    try { await removeObjects(storageClient, 'viewer-models', [current.viewer_model_path]); }
-    catch (error) { cleanupWarning = error instanceof Error ? error.message : 'Old viewer cleanup failed.'; }
+  const cleanupWarnings: string[] = [];
+  if (uploads.bbmodel && current?.bbmodel_path && current.bbmodel_path !== uploads.bbmodel.path) {
+    try {
+      await removeObjects(storageClient, 'bbmodels', [current.bbmodel_path]);
+    } catch (error) {
+      cleanupWarnings.push(error instanceof Error ? error.message : 'Old .bbmodel cleanup failed.');
+    }
+  }
+  if (uploads.viewer && current?.viewer_model_path && current.viewer_model_path !== uploads.viewer.path) {
+    try {
+      await removeObjects(storageClient, 'viewer-models', [current.viewer_model_path]);
+    } catch (error) {
+      cleanupWarnings.push(error instanceof Error ? error.message : 'Old viewer cleanup failed.');
+    }
   }
 
   return {
     creation: mapAdminCreation(await loadAdminCreation(client, id)),
-    ...(cleanupWarning ? { cleanupWarning } : {}),
+    ...(cleanupWarnings.length ? { cleanupWarning: cleanupWarnings.join(' ') } : {}),
   };
-}
-
-export async function recordViewerError(client: Client, id: string, message: string): Promise<MutationResult> {
-  const current = await loadAdminCreation(client, id);
-  const hasWorkingViewer = Boolean(current.viewer_model_path && current.viewer_status === 'ready');
-  const { error } = await client.from('creations').update({
-    viewer_status: hasWorkingViewer ? 'ready' : 'error',
-    viewer_error: message.slice(0, 500),
-    viewer_updated_at: new Date().toISOString(),
-  }).eq('id', id);
-  if (error) throw dbError('Could not save viewer error', error);
-  return { creation: mapAdminCreation(await loadAdminCreation(client, id)) };
 }
 
 export async function deleteRemoteCreation(client: Client, id: string): Promise<MutationResult> {
@@ -264,18 +210,18 @@ export async function deleteRemoteCreation(client: Client, id: string): Promise<
   const { error } = await client.from('creations').delete().eq('id', id);
   if (error) throw dbError('Could not delete creation', error);
 
-  const cleanupFailures = await cleanupNewUploads(
+  const cleanupFailures = await cleanupStoredPaths(
     client,
     renderPaths,
     current.bbmodel_path ?? undefined,
     current.viewer_model_path ?? undefined,
   );
-  return cleanupFailures.length ? { cleanupWarning: cleanupFailures.join(' ') } : {};
+  return cleanupFailures.length > 0 ? { cleanupWarning: cleanupFailures.join(' ') } : {};
 }
 
 export async function removeRemoteBbmodel(client: Client, id: string): Promise<MutationResult> {
   const current = await loadAdminCreation(client, id);
-  if (!current.bbmodel_path) return { creation: mapAdminCreation(current) };
+  if (!current.bbmodel_path && !current.viewer_model_path) return { creation: mapAdminCreation(current) };
 
   const { error } = await client.from('creations').update({
     bbmodel_path: null,
@@ -290,21 +236,89 @@ export async function removeRemoteBbmodel(client: Client, id: string): Promise<M
   }).eq('id', id);
   if (error) throw dbError('Could not detach .bbmodel', error);
 
-  const cleanupFailures = await removeObjectGroups(client as unknown as StorageClientLike, [
-    { bucket: 'bbmodels', paths: [current.bbmodel_path] },
+  const failures = await removeObjectGroups(client as unknown as StorageClientLike, [
+    { bucket: 'bbmodels', paths: current.bbmodel_path ? [current.bbmodel_path] : [] },
     { bucket: 'viewer-models', paths: current.viewer_model_path ? [current.viewer_model_path] : [] },
   ]);
 
   return {
     creation: mapAdminCreation(await loadAdminCreation(client, id)),
-    ...(cleanupFailures.length ? { cleanupWarning: cleanupFailures.join(' ') } : {}),
+    ...(failures.length ? { cleanupWarning: failures.join(' ') } : {}),
   };
 }
 
-export async function getPrivateBbmodel(client: Client, id: string): Promise<{ blob: Blob; filename: string }> {
+export async function replaceRemoteViewer(
+  client: Client,
+  userId: string,
+  id: string,
+  viewer: UploadedViewerRef & { animationNames: string[] },
+): Promise<MutationResult> {
+  const storageClient = client as unknown as StorageClientLike;
+  let current: CreationRowWithImages | undefined;
+
+  try {
+    current = await loadAdminCreation(client, id);
+    if (!current.bbmodel_path) throw new Error('No .bbmodel attached.');
+    await verifyUploadedObject(storageClient, userId, viewer);
+
+    const now = new Date().toISOString();
+    const { error } = await client.from('creations').update({
+      viewer_model_path: viewer.path,
+      viewer_status: 'ready',
+      viewer_error: null,
+      viewer_updated_at: now,
+      viewer_animation_names: viewer.animationNames,
+      updated_at: now,
+    }).eq('id', id);
+    if (error) throw dbError('Could not update viewer', error);
+  } catch (error) {
+    await cleanupUploadedRefs(storageClient, userId, [viewer]).catch(() => undefined);
+    throw error;
+  }
+
+  let cleanupWarning: string | undefined;
+  if (current?.viewer_model_path && current.viewer_model_path !== viewer.path) {
+    try {
+      await removeObjects(storageClient, 'viewer-models', [current.viewer_model_path]);
+    } catch (cleanupError) {
+      cleanupWarning = cleanupError instanceof Error ? cleanupError.message : 'Old viewer cleanup failed.';
+    }
+  }
+
+  return {
+    creation: mapAdminCreation(await loadAdminCreation(client, id)),
+    ...(cleanupWarning ? { cleanupWarning } : {}),
+  };
+}
+
+export async function recordViewerError(client: Client, id: string, message: string): Promise<MutationResult> {
+  const current = await loadAdminCreation(client, id);
+  const now = new Date().toISOString();
+  const hasWorkingViewer = Boolean(current.viewer_model_path && current.viewer_status === 'ready');
+
+  const { error } = await client.from('creations').update({
+    viewer_status: hasWorkingViewer ? 'ready' : 'error',
+    viewer_error: message.trim().slice(0, 500),
+    viewer_updated_at: now,
+    updated_at: now,
+  }).eq('id', id);
+  if (error) throw dbError('Could not record viewer error', error);
+
+  return { creation: mapAdminCreation(await loadAdminCreation(client, id)) };
+}
+
+export async function getPrivateBbmodelSignedDownload(
+  client: Client,
+  id: string,
+): Promise<{ url: string; filename: string }> {
   const current = await loadAdminCreation(client, id);
   if (!current.bbmodel_path || !current.bbmodel_filename) throw new Error('No .bbmodel attached.');
-  const { data, error } = await client.storage.from('bbmodels').download(current.bbmodel_path);
-  if (error || !data) throw new Error(error?.message || 'Could not download .bbmodel.');
-  return { blob: data, filename: current.bbmodel_filename };
+
+  const storage = (client as unknown as StorageClientLike).storage.from('bbmodels');
+  if (!storage.createSignedUrl) throw new Error('Storage client cannot sign .bbmodel downloads.');
+  const { data, error } = await storage.createSignedUrl(current.bbmodel_path, 60, {
+    download: current.bbmodel_filename,
+  });
+  if (error || !data?.signedUrl) throw new Error(error?.message || 'Could not sign .bbmodel download.');
+  return { url: data.signedUrl, filename: current.bbmodel_filename };
 }

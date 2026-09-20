@@ -1,5 +1,5 @@
 import { getAdminContext } from '@/lib/auth/server';
-import { getPrivateBbmodel, removeRemoteBbmodel } from '@/lib/admin/remote';
+import { getPrivateBbmodelSignedDownload, removeRemoteBbmodel } from '@/lib/admin/remote';
 
 export const runtime = 'nodejs';
 
@@ -9,15 +9,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   try {
     const { id } = await params;
-    const { blob, filename } = await getPrivateBbmodel(context.client, id);
-    const safeAscii = filename.replace(/[^A-Za-z0-9._-]/g, '_');
-    return new Response(blob, {
-      headers: {
-        'content-type': 'application/octet-stream',
-        'content-disposition': `attachment; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-        'cache-control': 'private, no-store',
-      },
-    });
+    const { url } = await getPrivateBbmodelSignedDownload(context.client, id);
+    return Response.redirect(url, 302);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Could not download .bbmodel.';
     const status = /not found|no \.bbmodel/i.test(message) ? 404 : 500;

@@ -1,0 +1,31 @@
+DIRECT SUPABASE UPLOAD PATCH
+
+Target branch:
+  feature/direct-supabase-upload
+
+HOW TO APPLY MANUALLY:
+1. Create or switch to branch: feature/direct-supabase-upload
+2. Upload/replace ALL files from this ZIP, preserving their folder paths.
+3. Important NEW paths include:
+   - app/api/admin/uploads/sign/route.ts
+   - app/api/admin/uploads/cleanup/route.ts
+   - lib/admin/direct-upload.ts
+   - lib/admin/upload-contracts.ts
+   - __tests__/admin/direct-upload.test.ts
+   - __tests__/admin/upload-contracts.test.ts
+   - __tests__/admin/upload-routes.test.ts
+4. package.json adds tus-js-client 4.3.1.
+5. Commit the changes on the test branch.
+6. Do NOT merge into main yet.
+7. Do NOT deploy Vercel yet.
+8. Do NOT change Supabase yet.
+
+After the commit, GitHub Actions Viewer CI must run:
+- npm install
+- unit tests
+- lint
+- Next.js build
+
+NOTE:
+No package-lock.json is included because the repository currently has no lockfile
+and the assistant environment cannot resolve registry.npmjs.org.
