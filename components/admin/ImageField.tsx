@@ -23,7 +23,6 @@ export function ImageField({ files, onChange, existingImages = [] }: ImageFieldP
     url: typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : '',
   })), [files]);
 
-  useEffect(() => setSavedImages(existingImages), [existingImages]);
   useEffect(() => () => {
     for (const preview of previews) if (preview.url && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(preview.url);
   }, [previews]);
