@@ -1,5 +1,5 @@
 import type { Database } from '@/lib/supabase/database.types';
-import type { AdminCreation, AdminGalleryImage, Creation } from './types';
+import type { AdminCreation, AdminGalleryImage, Creation, ViewerStatus } from './types';
 
 const PLACEHOLDER = '/models/_placeholder/creation-placeholder.svg';
 
@@ -11,11 +11,23 @@ function optionalText(value: string | null): string | undefined {
   return value?.trim() || undefined;
 }
 
-export function publicRenderUrl(storagePath: string, baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''): string {
+function publicStorageUrl(
+  bucket: 'portfolio-renders' | 'viewer-models',
+  storagePath: string,
+  baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+): string {
   const root = baseUrl.replace(/\/$/, '');
-  if (!root) throw new Error('NEXT_PUBLIC_SUPABASE_URL is required to build render URLs.');
+  if (!root) throw new Error('NEXT_PUBLIC_SUPABASE_URL is required to build public Storage URLs.');
   const safePath = storagePath.split('/').map(encodeURIComponent).join('/');
-  return `${root}/storage/v1/object/public/portfolio-renders/${safePath}`;
+  return `${root}/storage/v1/object/public/${bucket}/${safePath}`;
+}
+
+export function publicRenderUrl(storagePath: string, baseUrl?: string): string {
+  return publicStorageUrl('portfolio-renders', storagePath, baseUrl);
+}
+
+export function publicViewerUrl(storagePath: string, baseUrl?: string): string {
+  return publicStorageUrl('viewer-models', storagePath, baseUrl);
 }
 
 export function mapPublicCreation(row: CreationRowWithImages, baseUrl?: string): Creation {
@@ -42,6 +54,12 @@ export function mapPublicCreation(row: CreationRowWithImages, baseUrl?: string):
     ...(optionalText(row.model_type) ? { modelType: optionalText(row.model_type) } : {}),
     ...(optionalText(row.version) ? { version: optionalText(row.version) } : {}),
     ...(optionalText(row.notes) ? { notes: optionalText(row.notes) } : {}),
+    ...(row.viewer_status === 'ready' && row.viewer_model_path ? {
+      viewer: {
+        modelUrl: publicViewerUrl(row.viewer_model_path, baseUrl),
+        animationNames: [...row.viewer_animation_names],
+      },
+    } : {}),
   };
 }
 
@@ -55,9 +73,18 @@ export function mapAdminCreation(row: CreationRowWithImages, baseUrl?: string): 
       altText: image.alt_text,
       sortOrder: image.sort_order,
     }));
+
+  const rawStatus = row.viewer_status;
+  const viewerStatus: ViewerStatus = rawStatus === 'processing' || rawStatus === 'ready' || rawStatus === 'error'
+    ? rawStatus
+    : 'none';
+
   return {
     ...publicCreation,
     galleryImages,
+    viewerStatus,
+    ...(row.viewer_error ? { viewerError: row.viewer_error } : {}),
+    ...(row.viewer_updated_at ? { viewerUpdatedAt: row.viewer_updated_at } : {}),
     ...(row.bbmodel_filename && row.bbmodel_size !== null ? {
       bbmodel: { filename: row.bbmodel_filename, size: row.bbmodel_size },
     } : {}),
