@@ -1,86 +1,109 @@
 import type { CreationInput } from '../creations/types';
+import type {
+  CreationUploads,
+  UploadedAssetRef,
+  UploadedRenderRef,
+  UploadedSourceRef,
+  UploadedViewerRef,
+} from './upload-contracts';
+import { validateUploadedAssetRef } from './upload-contracts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-export type ParsedViewerUpload = {
-  file: File;
-  animationNames: string[];
-};
+function dedupeAnimationNames(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some((name) => typeof name !== 'string')) {
+    throw new Error('Invalid viewer animation metadata.');
+  }
+  return [...new Set(value.map((name) => name.trim()).filter(Boolean))];
+}
 
-export function parseCreationFormData(formData: FormData): {
+function parseAssetRef(value: unknown, userId: string): UploadedAssetRef {
+  if (!isRecord(value)) throw new Error('Invalid upload asset metadata.');
+  const ref = value as unknown as UploadedAssetRef;
+  validateUploadedAssetRef(userId, ref);
+  return ref;
+}
+
+export type CreationMutationBody = {
   input: CreationInput;
-  images: File[];
-  bbmodel?: File;
-  viewer?: ParsedViewerUpload;
+  uploads: CreationUploads;
   originalId?: string;
   replaceCover: boolean;
-} {
-  const payload = formData.get('payload');
-  if (typeof payload !== 'string' || !payload.trim()) throw new Error('Missing JSON payload.');
+};
 
-  let raw: unknown;
-  try {
-    raw = JSON.parse(payload);
-  } catch {
-    throw new Error('Invalid JSON payload.');
-  }
+export function parseCreationMutationBody(raw: unknown, userId: string): CreationMutationBody {
   if (!isRecord(raw)) throw new Error('Creation payload must be an object.');
-  if (typeof raw.name !== 'string' || !raw.name.trim()) throw new Error('Name is required.');
-  if (typeof raw.category !== 'string' || !raw.category.trim()) throw new Error('Category is required.');
+  if (!isRecord(raw.payload)) throw new Error('Creation payload is required.');
+  if (typeof raw.payload.name !== 'string' || !raw.payload.name.trim()) throw new Error('Name is required.');
+  if (typeof raw.payload.category !== 'string' || !raw.payload.category.trim()) throw new Error('Category is required.');
 
-  const entries = formData.getAll('images');
-  if (entries.length > 20) throw new Error('A maximum of 20 images can be uploaded at once.');
-  const images = entries.map((entry) => {
-    if (!(entry instanceof File)) throw new Error('Images must be uploaded as files.');
-    if (!entry.type.startsWith('image/')) throw new Error('Only image files are allowed.');
-    return entry;
-  });
+  if (raw.replaceCover !== undefined && typeof raw.replaceCover !== 'boolean') {
+    throw new Error('replaceCover must be a boolean.');
+  }
+  if (raw.originalId !== undefined && (typeof raw.originalId !== 'string' || !raw.originalId.trim())) {
+    throw new Error('originalId must be a non-empty string.');
+  }
 
-  const sourceEntries = formData.getAll('bbmodel').filter((entry) => entry instanceof File && entry.size > 0);
-  if (sourceEntries.length > 1) throw new Error('Only one .bbmodel file can be attached.');
-  const bbmodel = sourceEntries[0] instanceof File ? sourceEntries[0] : undefined;
+  let uploads: CreationUploads = { renders: [] };
+  if (raw.uploads !== undefined) {
+    if (!isRecord(raw.uploads)) throw new Error('Invalid uploads metadata.');
+    const rendersRaw = raw.uploads.renders ?? [];
+    if (!Array.isArray(rendersRaw)) throw new Error('Render uploads must be an array.');
+    if (rendersRaw.length > 20) throw new Error('A maximum of 20 renders can be uploaded at once.');
 
-  const viewerEntry = formData.get('viewerModel');
-  const animationEntry = formData.get('viewerAnimationNames');
-  let viewer: ParsedViewerUpload | undefined;
+    const renders = rendersRaw.map((value) => {
+      const ref = parseAssetRef(value, userId);
+      if (ref.kind !== 'render' || ref.bucket !== 'portfolio-renders') throw new Error('Invalid render upload metadata.');
+      return ref as UploadedRenderRef;
+    });
 
-  if (viewerEntry instanceof File && viewerEntry.size > 0) {
-    let parsedNames: unknown = [];
-    try {
-      parsedNames = typeof animationEntry === 'string' && animationEntry.trim()
-        ? JSON.parse(animationEntry)
-        : [];
-    } catch {
-      throw new Error('Invalid viewer animation metadata.');
+    let bbmodel: UploadedSourceRef | undefined;
+    if (raw.uploads.bbmodel !== undefined) {
+      const ref = parseAssetRef(raw.uploads.bbmodel, userId);
+      if (ref.kind !== 'bbmodel' || ref.bucket !== 'bbmodels') throw new Error('Invalid .bbmodel upload metadata.');
+      bbmodel = ref as UploadedSourceRef;
     }
-    if (!Array.isArray(parsedNames) || parsedNames.some((name) => typeof name !== 'string')) {
-      throw new Error('Invalid viewer animation metadata.');
+
+    let viewer: (UploadedViewerRef & { animationNames: string[] }) | undefined;
+    if (raw.uploads.viewer !== undefined) {
+      if (!isRecord(raw.uploads.viewer)) throw new Error('Invalid viewer upload metadata.');
+      const ref = parseAssetRef(raw.uploads.viewer, userId);
+      if (ref.kind !== 'viewer' || ref.bucket !== 'viewer-models') throw new Error('Invalid viewer upload metadata.');
+      viewer = {
+        ...(ref as UploadedViewerRef),
+        animationNames: dedupeAnimationNames(raw.uploads.viewer.animationNames ?? []),
+      };
     }
-    viewer = {
-      file: viewerEntry,
-      animationNames: [...new Set(parsedNames.map((name) => name.trim()).filter(Boolean))],
+
+    if (bbmodel && !viewer) throw new Error('A generated viewer GLB is required when attaching or replacing a .bbmodel.');
+    if (viewer && !bbmodel) throw new Error('Viewer GLB cannot be attached without a .bbmodel source.');
+
+    uploads = {
+      renders,
+      ...(bbmodel ? { bbmodel } : {}),
+      ...(viewer ? { viewer } : {}),
     };
   }
 
-  const replaceCover = formData.get('replaceCover') === 'true';
-  const originalIdEntry = formData.get('originalId');
-  const originalId = typeof originalIdEntry === 'string' && originalIdEntry.trim() ? originalIdEntry.trim() : undefined;
-
-  if (bbmodel && !viewer) {
-    throw new Error('A generated viewer GLB is required when attaching or replacing a .bbmodel.');
-  }
-  if (viewer && !bbmodel && !originalId) {
-    throw new Error('Viewer GLB cannot be attached without a .bbmodel source.');
-  }
-
   return {
-    input: raw as CreationInput,
-    images,
-    replaceCover,
-    ...(bbmodel ? { bbmodel } : {}),
-    ...(viewer ? { viewer } : {}),
-    ...(originalId ? { originalId } : {}),
+    input: raw.payload as unknown as CreationInput,
+    uploads,
+    replaceCover: raw.replaceCover === true,
+    ...(typeof raw.originalId === 'string' ? { originalId: raw.originalId.trim() } : {}),
+  };
+}
+
+export function parseViewerReplacementBody(
+  raw: unknown,
+  userId: string,
+): UploadedViewerRef & { animationNames: string[] } {
+  if (!isRecord(raw) || !isRecord(raw.viewer)) throw new Error('Viewer upload metadata is required.');
+  const ref = parseAssetRef(raw.viewer, userId);
+  if (ref.kind !== 'viewer' || ref.bucket !== 'viewer-models') throw new Error('Invalid viewer upload metadata.');
+  return {
+    ...(ref as UploadedViewerRef),
+    animationNames: dedupeAnimationNames(raw.viewer.animationNames ?? []),
   };
 }

@@ -2,6 +2,20 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import type { AdminCreation, Creation, CreationInput } from '@/lib/creations/types';
+import type {
+  CreationUploads,
+  UploadRequestFile,
+  UploadedAssetRef,
+  UploadedRenderRef,
+  UploadedSourceRef,
+  UploadedViewerRef,
+} from '@/lib/admin/upload-contracts';
+import {
+  authorizeUploads,
+  cleanupAuthorizedUploads,
+  toUploadedAssetRef,
+  uploadAuthorizedFile,
+} from '@/lib/admin/direct-upload';
 import { slugify } from '@/lib/utils/slug';
 import { FeaturedControls } from './FeaturedControls';
 import { ImageField } from './ImageField';
@@ -10,8 +24,38 @@ import { ViewerStatus } from './ViewerStatus';
 
 const PLACEHOLDER = '/models/_placeholder/creation-placeholder.svg';
 
+type SaveStage =
+  | 'idle'
+  | 'converting'
+  | 'preparing'
+  | 'uploading-source'
+  | 'uploading-viewer'
+  | 'uploading-renders'
+  | 'finalizing';
+
 function splitList(value: string): string[] {
   return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
+}
+
+function stageErrorMessage(stage: SaveStage, caught: unknown): string {
+  const message = caught instanceof Error ? caught.message : 'Could not save this creation.';
+  if (stage === 'converting') return `3D conversion failed: ${message}`;
+  if (stage === 'preparing') return `Could not prepare uploads: ${message}`;
+  if (stage === 'uploading-source') return `Source upload failed: ${message}`;
+  if (stage === 'uploading-viewer') return `Viewer upload failed: ${message}`;
+  if (stage === 'uploading-renders') return `Render upload failed: ${message}`;
+  return message;
+}
+
+function saveLabel(stage: SaveStage, progress: number | null, saving: boolean): string {
+  const percent = progress === null ? '' : ` ${progress}%`;
+  if (stage === 'converting') return 'Converting 3D…';
+  if (stage === 'preparing') return 'Preparing upload…';
+  if (stage === 'uploading-source') return `Uploading source…${percent}`;
+  if (stage === 'uploading-viewer') return `Uploading viewer…${percent}`;
+  if (stage === 'uploading-renders') return `Uploading renders…${percent}`;
+  if (stage === 'finalizing' || saving) return 'Saving creation…';
+  return 'Save creation';
 }
 
 type Props = {
@@ -41,7 +85,8 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
   const [bbmodel, setBbmodel] = useState<File | null>(null);
   const [replaceCover, setReplaceCover] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [viewerStage, setViewerStage] = useState<'idle' | 'converting' | 'uploading'>('idle');
+  const [viewerStage, setViewerStage] = useState<SaveStage>('idle');
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState('');
   const datalistId = useMemo(() => `categories-${creation?.id ?? 'new'}`, [creation?.id]);
 
@@ -54,67 +99,153 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
     event.preventDefault();
     setSaving(true);
     setError('');
+    setUploadProgress(null);
+
+    const payload: CreationInput = {
+      ...(creation ? { id: creation.id } : {}),
+      slug,
+      name,
+      category,
+      tags: splitList(tags),
+      description,
+      coverImage: creation?.coverImage ?? PLACEHOLDER,
+      images: creation?.images ?? [],
+      animations: splitList(animations),
+      featured,
+      ...(featured && featuredOrder !== undefined ? { featuredOrder } : {}),
+      published,
+      createdAt,
+      ...(software.trim() ? { software: software.trim() } : {}),
+      ...(modelType.trim() ? { modelType: modelType.trim() } : {}),
+      ...(version.trim() ? { version: version.trim() } : {}),
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
+    };
+
+    let currentStage: SaveStage = 'idle';
+    const setStage = (stage: SaveStage) => {
+      currentStage = stage;
+      setViewerStage(stage);
+      setUploadProgress(null);
+    };
+    const successfullyUploaded: UploadedAssetRef[] = [];
+    let finalized = false;
+    let finalizationStarted = false;
 
     try {
-      const payload: CreationInput = {
-        ...(creation ? { id: creation.id } : {}),
-        slug,
-        name,
-        category,
-        tags: splitList(tags),
-        description,
-        coverImage: creation?.coverImage ?? PLACEHOLDER,
-        images: creation?.images ?? [],
-        animations: splitList(animations),
-        featured,
-        ...(featured && featuredOrder !== undefined ? { featuredOrder } : {}),
-        published,
-        createdAt,
-        ...(software.trim() ? { software: software.trim() } : {}),
-        ...(modelType.trim() ? { modelType: modelType.trim() } : {}),
-        ...(version.trim() ? { version: version.trim() } : {}),
-        ...(notes.trim() ? { notes: notes.trim() } : {}),
-      };
-
       let viewerArtifact: Awaited<ReturnType<typeof import('@/lib/viewer/convert')['convertBbmodelToViewer']>> | undefined;
       if (bbmodel) {
-        setViewerStage('converting');
+        setStage('converting');
         const { convertBbmodelToViewer } = await import('@/lib/viewer/convert');
         viewerArtifact = await convertBbmodelToViewer(bbmodel);
       }
 
-      const formData = new FormData();
-      formData.set('payload', JSON.stringify(payload));
-      if (creation) formData.set('originalId', creation.id);
-      for (const image of files) formData.append('images', image);
-      if (bbmodel) formData.set('bbmodel', bbmodel);
-      if (viewerArtifact) {
-        formData.set('viewerModel', viewerArtifact.file);
-        formData.set('viewerAnimationNames', JSON.stringify(viewerArtifact.animationNames));
-      }
-      if (creation && replaceCover) formData.set('replaceCover', 'true');
+      const fileByKey = new Map<string, File>();
+      const requests: UploadRequestFile[] = [];
 
-      setViewerStage('uploading');
+      files.forEach((file, index) => {
+        const clientKey = `render:${index}`;
+        fileByKey.set(clientKey, file);
+        requests.push({
+          clientKey,
+          kind: 'render',
+          filename: file.name,
+          size: file.size,
+          contentType: file.type,
+        });
+      });
+
+      if (bbmodel) {
+        fileByKey.set('bbmodel', bbmodel);
+        requests.push({
+          clientKey: 'bbmodel',
+          kind: 'bbmodel',
+          filename: bbmodel.name,
+          size: bbmodel.size,
+          contentType: bbmodel.type || 'application/octet-stream',
+        });
+      }
+
+      if (viewerArtifact) {
+        fileByKey.set('viewer', viewerArtifact.file);
+        requests.push({
+          clientKey: 'viewer',
+          kind: 'viewer',
+          filename: viewerArtifact.file.name,
+          size: viewerArtifact.file.size,
+          contentType: 'model/gltf-binary',
+        });
+      }
+
+      let authorized = new Map<string, Awaited<ReturnType<typeof authorizeUploads>>['uploads'][number]>();
+      if (requests.length > 0) {
+        setStage('preparing');
+        const authorization = await authorizeUploads(requests);
+        authorized = new Map(authorization.uploads.map((item) => [item.clientKey, item] as const));
+      }
+
+      const uploadOne = async (clientKey: string, stage: SaveStage) => {
+        const descriptor = authorized.get(clientKey);
+        const file = fileByKey.get(clientKey);
+        if (!descriptor || !file) throw new Error(`Missing upload authorization for ${clientKey}.`);
+        setStage(stage);
+        setUploadProgress(0);
+        await uploadAuthorizedFile(descriptor, file, { onProgress: setUploadProgress });
+        successfullyUploaded.push(toUploadedAssetRef(descriptor));
+      };
+
+      if (bbmodel) {
+        await uploadOne('bbmodel', 'uploading-source');
+        await uploadOne('viewer', 'uploading-viewer');
+      }
+      for (let index = 0; index < files.length; index += 1) {
+        await uploadOne(`render:${index}`, 'uploading-renders');
+      }
+
+      const uploadedByKey = new Map(successfullyUploaded.map((ref) => [ref.clientKey, ref] as const));
+      const renderRefs = files.map((_file, index) => {
+        const ref = uploadedByKey.get(`render:${index}`);
+        if (!ref) throw new Error(`Render upload render:${index} is incomplete.`);
+        return ref as UploadedRenderRef;
+      });
+      const uploads: CreationUploads = { renders: renderRefs };
+
+      if (bbmodel && viewerArtifact) {
+        const sourceRef = uploadedByKey.get('bbmodel') as UploadedSourceRef | undefined;
+        const viewerRef = uploadedByKey.get('viewer') as UploadedViewerRef | undefined;
+        if (!sourceRef || !viewerRef) throw new Error('Source/viewer upload pair is incomplete.');
+        uploads.bbmodel = sourceRef;
+        uploads.viewer = { ...viewerRef, animationNames: viewerArtifact.animationNames };
+      }
+
+      setStage('finalizing');
+      finalizationStarted = true;
       const response = await fetch('/api/admin/creations', {
         method: creation ? 'PUT' : 'POST',
-        body: formData,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          payload,
+          uploads,
+          ...(creation ? { originalId: creation.id } : {}),
+          ...(creation && replaceCover ? { replaceCover: true } : {}),
+        }),
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || 'Could not save this creation.');
+      const result = await response.json().catch(() => ({})) as { error?: unknown; creation?: unknown };
+      if (!response.ok) {
+        throw new Error(typeof result.error === 'string' ? result.error : 'Could not save this creation.');
+      }
+      finalized = true;
       if (result.creation) onSaved?.(result.creation as Creation);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not save this creation.');
+      if (!finalizationStarted && !finalized && successfullyUploaded.length > 0) {
+        await cleanupAuthorizedUploads(successfullyUploaded).catch(() => undefined);
+      }
+      setError(stageErrorMessage(currentStage, caught));
     } finally {
-      setSaving(false);
       setViewerStage('idle');
+      setUploadProgress(null);
+      setSaving(false);
     }
   }
-
-  const saveLabel = viewerStage === 'converting'
-    ? 'Converting 3D…'
-    : viewerStage === 'uploading' || saving
-      ? 'Saving…'
-      : 'Save creation';
 
   return (
     <form className="admin-editor" onSubmit={handleSubmit}>
@@ -196,7 +327,7 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
 
       <div className="admin-editor-actions">
         {onCancel && <button className="admin-button secondary" type="button" onClick={onCancel}>Cancel</button>}
-        <button className="admin-button primary" type="submit" disabled={saving}>{saveLabel}</button>
+        <button className="admin-button primary" type="submit" disabled={saving}>{saveLabel(viewerStage, uploadProgress, saving)}</button>
       </div>
     </form>
   );

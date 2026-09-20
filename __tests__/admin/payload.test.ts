@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { parseCreationFormData } from '@/lib/admin/payload';
+import { parseCreationMutationBody } from '@/lib/admin/payload';
+
+const userId = '11111111-1111-4111-8111-111111111111';
+const otherUserId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const sessionId = '22222222-2222-4222-8222-222222222222';
+const sourceObjectId = '33333333-3333-4333-8333-333333333333';
+const viewerObjectId = '44444444-4444-4444-8444-444444444444';
 
 const payload = {
   name: 'Vorakh', category: 'Boss', tags: ['Ice'], description: '',
@@ -7,64 +13,72 @@ const payload = {
   featured: false, published: true,
 };
 
-function form(value: unknown = payload) {
-  const data = new FormData();
-  data.set('payload', JSON.stringify(value));
-  return data;
-}
+const sourceRef = {
+  clientKey: 'bbmodel', kind: 'bbmodel' as const, bucket: 'bbmodels' as const,
+  path: `uploads/${userId}/${sessionId}/${sourceObjectId}-Vorakh.bbmodel`,
+  filename: 'Vorakh.bbmodel', size: 1024, contentType: 'application/octet-stream',
+};
 
-describe('parseCreationFormData', () => {
-  it('parses payload and image files', () => {
-    const data = form();
-    data.append('images', new File(['x'], 'front.png', { type: 'image/png' }));
-    const result = parseCreationFormData(data);
-    expect(result.input.name).toBe('Vorakh');
-    expect(result.images).toHaveLength(1);
+const viewerRef = {
+  clientKey: 'viewer', kind: 'viewer' as const, bucket: 'viewer-models' as const,
+  path: `uploads/${userId}/${sessionId}/${viewerObjectId}.glb`,
+  filename: 'model.glb', size: 2048, contentType: 'model/gltf-binary',
+};
+
+describe('parseCreationMutationBody', () => {
+  it('parses a source paired with its viewer without File objects', () => {
+    const result = parseCreationMutationBody({
+      payload,
+      uploads: {
+        renders: [],
+        bbmodel: sourceRef,
+        viewer: { ...viewerRef, animationNames: ['Idle', 'Attack', 'Idle'] },
+      },
+    }, userId);
+
+    expect(result.uploads.bbmodel?.path).toBe(sourceRef.path);
+    expect(result.uploads.viewer?.animationNames).toEqual(['Idle', 'Attack']);
   });
 
-  it('parses a private source paired with its generated viewer', () => {
-    const data = form();
-    const source = new File(['{}'], 'Vorakh.bbmodel', { type: 'application/octet-stream' });
-    const viewer = new File(['glb'], 'model.glb', { type: 'model/gltf-binary' });
-    data.set('bbmodel', source);
-    data.set('viewerModel', viewer);
-    data.set('viewerAnimationNames', JSON.stringify(['Idle', 'Attack', 'Idle']));
-    const result = parseCreationFormData(data);
-    expect(result.bbmodel?.name).toBe('Vorakh.bbmodel');
-    expect(result.viewer?.file.name).toBe('model.glb');
-    expect(result.viewer?.animationNames).toEqual(['Idle', 'Attack']);
+  it('rejects a source without a viewer', () => {
+    expect(() => parseCreationMutationBody({
+      payload,
+      uploads: { renders: [], bbmodel: sourceRef },
+    }, userId)).toThrow(/viewer/i);
   });
 
-  it('rejects a new private source when its generated viewer is missing', () => {
-    const data = form();
-    data.set('bbmodel', new File(['{}'], 'Vorakh.bbmodel'));
-    expect(() => parseCreationFormData(data)).toThrow(/viewer/i);
+  it('rejects a forged upload path even when the bucket is correct', () => {
+    expect(() => parseCreationMutationBody({
+      payload,
+      uploads: {
+        renders: [],
+        bbmodel: { ...sourceRef, path: sourceRef.path.replace(userId, otherUserId) },
+        viewer: { ...viewerRef, animationNames: [] },
+      },
+    }, userId)).toThrow(/upload path/i);
   });
 
-  it('rejects multiple private source attachments', () => {
-    const data = form();
-    data.append('bbmodel', new File(['1'], 'one.bbmodel'));
-    data.append('bbmodel', new File(['2'], 'two.bbmodel'));
-    expect(() => parseCreationFormData(data)).toThrow(/one \.bbmodel/i);
+  it('allows metadata-only updates with no new uploads', () => {
+    const result = parseCreationMutationBody({ payload, originalId: 'creation-id' }, userId);
+    expect(result.uploads).toEqual({ renders: [] });
+    expect(result.originalId).toBe('creation-id');
   });
 
-  it('rejects malformed JSON', () => {
-    const data = new FormData();
-    data.set('payload', '{');
-    expect(() => parseCreationFormData(data)).toThrow(/json/i);
+  it('rejects malformed payloads and more than twenty renders', () => {
+    expect(() => parseCreationMutationBody({ payload: { category: 'Boss' } }, userId)).toThrow(/name/i);
+    expect(() => parseCreationMutationBody({
+      payload,
+      uploads: { renders: Array.from({ length: 21 }, () => ({ ...viewerRef, kind: 'render', bucket: 'portfolio-renders' })) },
+    }, userId)).toThrow(/20/i);
   });
+});
 
-  it('rejects missing required fields', () => {
-    expect(() => parseCreationFormData(form({ category: 'Boss' }))).toThrow(/name/i);
-  });
-
-  it('rejects non-image files and more than 20 images', () => {
-    const wrong = form();
-    wrong.append('images', new File(['x'], 'readme.txt', { type: 'text/plain' }));
-    expect(() => parseCreationFormData(wrong)).toThrow(/image/i);
-
-    const many = form();
-    for (let i = 0; i < 21; i++) many.append('images', new File(['x'], `${i}.png`, { type: 'image/png' }));
-    expect(() => parseCreationFormData(many)).toThrow(/20/i);
+describe('parseViewerReplacementBody', () => {
+  it('accepts one current-admin viewer ref and deduplicates animation names', async () => {
+    const { parseViewerReplacementBody } = await import('@/lib/admin/payload');
+    const result = parseViewerReplacementBody({
+      viewer: { ...viewerRef, animationNames: ['Idle', 'Idle', 'Attack'] },
+    }, userId);
+    expect(result.animationNames).toEqual(['Idle', 'Attack']);
   });
 });

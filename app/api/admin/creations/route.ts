@@ -1,5 +1,5 @@
 import { getAdminContext } from '@/lib/auth/server';
-import { parseCreationFormData } from '@/lib/admin/payload';
+import { parseCreationMutationBody } from '@/lib/admin/payload';
 import { createRemoteCreation, deleteRemoteCreation, updateRemoteCreation } from '@/lib/admin/remote';
 
 export const runtime = 'nodejs';
@@ -8,7 +8,7 @@ function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : 'Unexpected error.';
   if (/already exists|duplicate/i.test(message)) return Response.json({ error: message }, { status: 409 });
   if (/not found/i.test(message)) return Response.json({ error: message }, { status: 404 });
-  if (/required|invalid|unsafe|image|slug|filename|payload|json|maximum|10 mb|50 mb|unsupported|bbmodel|viewer|glb/i.test(message)) {
+  if (/required|invalid|unsafe|image|slug|filename|payload|json|maximum|10 mib|50 mib|unsupported|bbmodel|viewer|glb|upload|bucket|size/i.test(message)) {
     return Response.json({ error: message }, { status: 400 });
   }
   console.error('[admin] creation mutation failed', message);
@@ -26,8 +26,9 @@ export async function POST(request: Request) {
   if (!context) return Response.json({ error: 'Unauthorized.' }, { status: 401 });
 
   try {
-    const { input, images, bbmodel, viewer } = parseCreationFormData(await request.formData());
-    const result = await createRemoteCreation(context.client, input, images, bbmodel, viewer);
+    const body = await request.json().catch(() => null);
+    const parsed = parseCreationMutationBody(body, context.userId);
+    const result = await createRemoteCreation(context.client, context.userId, parsed.input, parsed.uploads);
     return Response.json(result, { status: 201 });
   } catch (error) {
     return errorResponse(error);
@@ -39,9 +40,17 @@ export async function PUT(request: Request) {
   if (!context) return Response.json({ error: 'Unauthorized.' }, { status: 401 });
 
   try {
-    const { input, images, bbmodel, viewer, originalId, replaceCover } = parseCreationFormData(await request.formData());
-    if (!originalId) return Response.json({ error: 'originalId is required.' }, { status: 400 });
-    const result = await updateRemoteCreation(context.client, originalId, input, images, bbmodel, viewer, replaceCover);
+    const body = await request.json().catch(() => null);
+    const parsed = parseCreationMutationBody(body, context.userId);
+    if (!parsed.originalId) return Response.json({ error: 'originalId is required.' }, { status: 400 });
+    const result = await updateRemoteCreation(
+      context.client,
+      context.userId,
+      parsed.originalId,
+      parsed.input,
+      parsed.uploads,
+      parsed.replaceCover,
+    );
     return Response.json(result);
   } catch (error) {
     return errorResponse(error);

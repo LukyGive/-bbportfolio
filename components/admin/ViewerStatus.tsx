@@ -2,6 +2,12 @@
 
 import { useState } from 'react';
 import type { ViewerStatus as ViewerStatusValue } from '@/lib/creations/types';
+import {
+  authorizeUploads,
+  cleanupAuthorizedUploads,
+  toUploadedAssetRef,
+  uploadAuthorizedFile,
+} from '@/lib/admin/direct-upload';
 
 type Props = {
   creationId: string;
@@ -21,12 +27,17 @@ export function ViewerStatus({
   onRegenerated,
 }: Props) {
   const [working, setWorking] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [localError, setLocalError] = useState('');
 
   async function regenerate() {
     if (working) return;
     setWorking(true);
+    setProgress(null);
     setLocalError('');
+    let uploadedViewer: ReturnType<typeof toUploadedAssetRef> | undefined;
+    let finalizationStarted = false;
+
     try {
       const sourceResponse = await fetch(`/api/admin/bbmodel/${creationId}`);
       if (!sourceResponse.ok) throw new Error('Could not load private Blockbench source.');
@@ -34,22 +45,47 @@ export function ViewerStatus({
       const { convertBbmodelToViewer } = await import('@/lib/viewer/convert');
       const artifact = await convertBbmodelToViewer(source);
 
-      const body = new FormData();
-      body.set('viewerModel', artifact.file);
-      body.set('viewerAnimationNames', JSON.stringify(artifact.animationNames));
-      const response = await fetch(`/api/admin/viewer/${creationId}`, { method: 'POST', body });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || 'Could not regenerate viewer.');
+      const authorization = await authorizeUploads([{
+        clientKey: 'viewer',
+        kind: 'viewer',
+        filename: artifact.file.name,
+        size: artifact.file.size,
+        contentType: 'model/gltf-binary',
+      }]);
+      const descriptor = authorization.uploads.find((item) => item.clientKey === 'viewer');
+      if (!descriptor) throw new Error('Viewer upload authorization is missing.');
+
+      setProgress(0);
+      await uploadAuthorizedFile(descriptor, artifact.file, { onProgress: setProgress });
+      uploadedViewer = toUploadedAssetRef(descriptor);
+
+      finalizationStarted = true;
+      const response = await fetch(`/api/admin/viewer/${creationId}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          viewer: { ...uploadedViewer, animationNames: artifact.animationNames },
+        }),
+      });
+      const result = await response.json().catch(() => ({})) as { error?: unknown };
+      if (!response.ok) {
+        throw new Error(typeof result.error === 'string' ? result.error : 'Could not regenerate viewer.');
+      }
+      uploadedViewer = undefined;
       onRegenerated?.();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Could not regenerate viewer.';
       setLocalError(message);
+      if (uploadedViewer && !finalizationStarted) {
+        await cleanupAuthorizedUploads([uploadedViewer]).catch(() => undefined);
+      }
       await fetch(`/api/admin/viewer/${creationId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ error: message }),
       }).catch(() => undefined);
     } finally {
+      setProgress(null);
       setWorking(false);
     }
   }
@@ -65,7 +101,7 @@ export function ViewerStatus({
         {(localError || error) && <small className="admin-viewer-error">{localError || error}</small>}
       </div>
       <button className="admin-button secondary" type="button" disabled={working} onClick={() => void regenerate()}>
-        {working ? 'Generating…' : 'Regenerate viewer'}
+        {working ? (progress === null ? 'Generating…' : `Uploading… ${progress}%`) : 'Regenerate viewer'}
       </button>
     </div>
   );

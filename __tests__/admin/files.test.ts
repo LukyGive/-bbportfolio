@@ -50,3 +50,50 @@ describe('private source validation', () => {
   });
 
 });
+
+it('creates admin/session scoped immutable viewer paths', async () => {
+  const { createAuthorizedObjectPath } = await import('@/lib/admin/files');
+  const path = createAuthorizedObjectPath(
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222',
+    {
+      clientKey: 'viewer',
+      kind: 'viewer',
+      filename: 'model.glb',
+      size: 100,
+      contentType: 'model/gltf-binary',
+    },
+  );
+
+  expect(path).toMatch(
+    /^uploads\/11111111-1111-4111-8111-111111111111\/22222222-2222-4222-8222-222222222222\/[0-9a-f-]+\.glb$/i,
+  );
+});
+
+it('rejects a missing signed upload object', async () => {
+  const { verifyUploadedObject } = await import('@/lib/admin/files');
+  const client = {
+    storage: { from: () => ({ list: async () => ({ data: [], error: null }) }) },
+  };
+  await expect(verifyUploadedObject(client as never, '11111111-1111-4111-8111-111111111111', {
+    clientKey: 'viewer', kind: 'viewer', bucket: 'viewer-models',
+    path: 'uploads/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222/33333333-3333-4333-8333-333333333333.glb',
+    filename: 'model.glb', size: 100, contentType: 'model/gltf-binary',
+  })).rejects.toThrow(/not found/i);
+});
+
+it('rejects an actual uploaded viewer above 50 MiB', async () => {
+  const { verifyUploadedObject } = await import('@/lib/admin/files');
+  const name = '33333333-3333-4333-8333-333333333333.glb';
+  const client = {
+    storage: { from: () => ({ list: async () => ({
+      data: [{ name, metadata: { size: 50 * 1024 * 1024 + 1, mimetype: 'model/gltf-binary' } }],
+      error: null,
+    }) }) },
+  };
+  await expect(verifyUploadedObject(client as never, '11111111-1111-4111-8111-111111111111', {
+    clientKey: 'viewer', kind: 'viewer', bucket: 'viewer-models',
+    path: `uploads/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222/${name}`,
+    filename: 'model.glb', size: 100, contentType: 'model/gltf-binary',
+  })).rejects.toThrow(/50 MiB/i);
+});
