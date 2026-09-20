@@ -1,0 +1,30 @@
+name: Viewer CI
+
+on:
+  push:
+    branches:
+      - feature/animated-3d-viewer
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://stadadtkqytlnzxlmkzg.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_jpzPrVIfpUxsZmTGLvoiEA_IHuRaMyZ
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package.json
+      - name: Install dependencies
+        run: npm install
+      - name: Unit tests
+        run: npm run test:run
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build

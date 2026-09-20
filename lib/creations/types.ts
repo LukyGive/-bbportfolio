@@ -1,3 +1,10 @@
+export type ViewerInfo = {
+  modelUrl: string;
+  animationNames: string[];
+};
+
+export type ViewerStatus = 'none' | 'processing' | 'ready' | 'error';
+
 export type Creation = {
   id: string;
   slug: string;
@@ -16,6 +23,7 @@ export type Creation = {
   modelType?: string;
   version?: string;
   notes?: string;
+  viewer?: ViewerInfo;
 };
 
 export type AdminCreation = Creation & {
@@ -24,14 +32,16 @@ export type AdminCreation = Creation & {
     filename: string;
     size: number;
   };
+  viewerStatus: ViewerStatus;
+  viewerError?: string;
+  viewerUpdatedAt?: string;
 };
 
-export type CreationInput = Omit<Creation, 'id' | 'slug' | 'createdAt'> & {
+export type CreationInput = Omit<Creation, 'id' | 'slug' | 'createdAt' | 'viewer'> & {
   id?: string;
   slug?: string;
   createdAt?: string;
 };
-
 
 export type AdminGalleryImage = {
   id: string;

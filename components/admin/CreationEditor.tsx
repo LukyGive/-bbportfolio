@@ -6,6 +6,7 @@ import { slugify } from '@/lib/utils/slug';
 import { FeaturedControls } from './FeaturedControls';
 import { ImageField } from './ImageField';
 import { BbmodelField } from './BbmodelField';
+import { ViewerStatus } from './ViewerStatus';
 
 const PLACEHOLDER = '/models/_placeholder/creation-placeholder.svg';
 
@@ -40,6 +41,7 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
   const [bbmodel, setBbmodel] = useState<File | null>(null);
   const [replaceCover, setReplaceCover] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [viewerStage, setViewerStage] = useState<'idle' | 'converting' | 'uploading'>('idle');
   const [error, setError] = useState('');
   const datalistId = useMemo(() => `categories-${creation?.id ?? 'new'}`, [creation?.id]);
 
@@ -53,34 +55,46 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
     setSaving(true);
     setError('');
 
-    const payload: CreationInput = {
-      ...(creation ? { id: creation.id } : {}),
-      slug,
-      name,
-      category,
-      tags: splitList(tags),
-      description,
-      coverImage: creation?.coverImage ?? PLACEHOLDER,
-      images: creation?.images ?? [],
-      animations: splitList(animations),
-      featured,
-      ...(featured && featuredOrder !== undefined ? { featuredOrder } : {}),
-      published,
-      createdAt,
-      ...(software.trim() ? { software: software.trim() } : {}),
-      ...(modelType.trim() ? { modelType: modelType.trim() } : {}),
-      ...(version.trim() ? { version: version.trim() } : {}),
-      ...(notes.trim() ? { notes: notes.trim() } : {}),
-    };
-
-    const formData = new FormData();
-    formData.set('payload', JSON.stringify(payload));
-    if (creation) formData.set('originalId', creation.id);
-    for (const image of files) formData.append('images', image);
-    if (bbmodel) formData.set('bbmodel', bbmodel);
-    if (creation && replaceCover) formData.set('replaceCover', 'true');
-
     try {
+      const payload: CreationInput = {
+        ...(creation ? { id: creation.id } : {}),
+        slug,
+        name,
+        category,
+        tags: splitList(tags),
+        description,
+        coverImage: creation?.coverImage ?? PLACEHOLDER,
+        images: creation?.images ?? [],
+        animations: splitList(animations),
+        featured,
+        ...(featured && featuredOrder !== undefined ? { featuredOrder } : {}),
+        published,
+        createdAt,
+        ...(software.trim() ? { software: software.trim() } : {}),
+        ...(modelType.trim() ? { modelType: modelType.trim() } : {}),
+        ...(version.trim() ? { version: version.trim() } : {}),
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
+      };
+
+      let viewerArtifact: Awaited<ReturnType<typeof import('@/lib/viewer/convert')['convertBbmodelToViewer']>> | undefined;
+      if (bbmodel) {
+        setViewerStage('converting');
+        const { convertBbmodelToViewer } = await import('@/lib/viewer/convert');
+        viewerArtifact = await convertBbmodelToViewer(bbmodel);
+      }
+
+      const formData = new FormData();
+      formData.set('payload', JSON.stringify(payload));
+      if (creation) formData.set('originalId', creation.id);
+      for (const image of files) formData.append('images', image);
+      if (bbmodel) formData.set('bbmodel', bbmodel);
+      if (viewerArtifact) {
+        formData.set('viewerModel', viewerArtifact.file);
+        formData.set('viewerAnimationNames', JSON.stringify(viewerArtifact.animationNames));
+      }
+      if (creation && replaceCover) formData.set('replaceCover', 'true');
+
+      setViewerStage('uploading');
       const response = await fetch('/api/admin/creations', {
         method: creation ? 'PUT' : 'POST',
         body: formData,
@@ -92,8 +106,15 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
       setError(caught instanceof Error ? caught.message : 'Could not save this creation.');
     } finally {
       setSaving(false);
+      setViewerStage('idle');
     }
   }
+
+  const saveLabel = viewerStage === 'converting'
+    ? 'Converting 3D…'
+    : viewerStage === 'uploading' || saving
+      ? 'Saving…'
+      : 'Save creation';
 
   return (
     <form className="admin-editor" onSubmit={handleSubmit}>
@@ -111,12 +132,7 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
         </label>
         <label className="admin-field">
           <span>Slug</span>
-          <input
-            aria-label="Slug"
-            value={slug}
-            onChange={(event) => { setSlugLocked(true); setSlug(event.target.value); }}
-            placeholder="auto-generated-from-name"
-          />
+          <input aria-label="Slug" value={slug} onChange={(event) => { setSlugLocked(true); setSlug(event.target.value); }} placeholder="auto-generated-from-name" />
         </label>
       </div>
 
@@ -126,27 +142,13 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
           <input required aria-label="Category" list={datalistId} value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Boss, NPC, Item..." />
           <datalist id={datalistId}>{categories.map((item) => <option key={item} value={item} />)}</datalist>
         </label>
-        <label className="admin-field">
-          <span>Created</span>
-          <input type="date" value={createdAt} onChange={(event) => setCreatedAt(event.target.value)} />
-        </label>
+        <label className="admin-field"><span>Created</span><input type="date" value={createdAt} onChange={(event) => setCreatedAt(event.target.value)} /></label>
       </div>
 
-      <label className="admin-field">
-        <span>Tags <small>comma separated</small></span>
-        <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="Ice, Fantasy, Golem" />
-      </label>
+      <label className="admin-field"><span>Tags <small>comma separated</small></span><input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="Ice, Fantasy, Golem" /></label>
+      <label className="admin-field"><span>Description</span><textarea rows={5} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe the model, its role and visual direction..." /></label>
 
-      <label className="admin-field">
-        <span>Description</span>
-        <textarea rows={5} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe the model, its role and visual direction..." />
-      </label>
-
-      <ImageField
-        files={files}
-        onChange={setFiles}
-        existingImages={creation?.galleryImages ?? []}
-      />
+      <ImageField files={files} onChange={setFiles} existingImages={creation?.galleryImages ?? []} />
 
       {creation && files.length > 0 && (
         <label className="admin-check admin-cover-choice">
@@ -163,21 +165,25 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
         onRemoved={() => window.location.reload()}
       />
 
-      <label className="admin-field">
-        <span>Animations <small>comma separated</small></span>
-        <input value={animations} onChange={(event) => setAnimations(event.target.value)} placeholder="Idle, Walk, Attack, Death" />
-      </label>
+      {creation?.id && creation.bbmodel && (
+        <ViewerStatus
+          creationId={creation.id}
+          sourceFilename={creation.bbmodel.filename}
+          status={creation.viewerStatus}
+          error={creation.viewerError}
+          animationCount={creation.viewer?.animationNames.length ?? 0}
+          onRegenerated={() => window.location.reload()}
+        />
+      )}
+
+      <label className="admin-field"><span>Animations <small>comma separated</small></span><input value={animations} onChange={(event) => setAnimations(event.target.value)} placeholder="Idle, Walk, Attack, Death" /></label>
 
       <div className="admin-options">
         <label className="admin-check">
           <input type="checkbox" checked={published} onChange={(event) => setPublished(event.target.checked)} />
           <span><strong>Published</strong><small>Visible on the public portfolio.</small></span>
         </label>
-        <FeaturedControls
-          featured={featured}
-          featuredOrder={featuredOrder}
-          onChange={(next) => { setFeatured(next.featured); setFeaturedOrder(next.featuredOrder); }}
-        />
+        <FeaturedControls featured={featured} featuredOrder={featuredOrder} onChange={(next) => { setFeatured(next.featured); setFeaturedOrder(next.featuredOrder); }} />
       </div>
 
       <div className="admin-form-grid three">
@@ -186,14 +192,11 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
         <label className="admin-field"><span>Version</span><input value={version} onChange={(event) => setVersion(event.target.value)} placeholder="Optional" /></label>
       </div>
 
-      <label className="admin-field">
-        <span>Project notes</span>
-        <textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional note shown on the project page." />
-      </label>
+      <label className="admin-field"><span>Project notes</span><textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional note shown on the project page." /></label>
 
       <div className="admin-editor-actions">
         {onCancel && <button className="admin-button secondary" type="button" onClick={onCancel}>Cancel</button>}
-        <button className="admin-button primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save creation'}</button>
+        <button className="admin-button primary" type="submit" disabled={saving}>{saveLabel}</button>
       </div>
     </form>
   );

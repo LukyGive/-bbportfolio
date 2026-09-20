@@ -8,7 +8,7 @@ function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : 'Unexpected error.';
   if (/already exists|duplicate/i.test(message)) return Response.json({ error: message }, { status: 409 });
   if (/not found/i.test(message)) return Response.json({ error: message }, { status: 404 });
-  if (/required|invalid|unsafe|image|slug|filename|payload|json|maximum|10 mb|50 mb|unsupported|bbmodel/i.test(message)) {
+  if (/required|invalid|unsafe|image|slug|filename|payload|json|maximum|10 mb|50 mb|unsupported|bbmodel|viewer|glb/i.test(message)) {
     return Response.json({ error: message }, { status: 400 });
   }
   console.error('[admin] creation mutation failed', message);
@@ -26,8 +26,8 @@ export async function POST(request: Request) {
   if (!context) return Response.json({ error: 'Unauthorized.' }, { status: 401 });
 
   try {
-    const { input, images, bbmodel } = parseCreationFormData(await request.formData());
-    const result = await createRemoteCreation(context.client, input, images, bbmodel);
+    const { input, images, bbmodel, viewer } = parseCreationFormData(await request.formData());
+    const result = await createRemoteCreation(context.client, input, images, bbmodel, viewer);
     return Response.json(result, { status: 201 });
   } catch (error) {
     return errorResponse(error);
@@ -39,9 +39,9 @@ export async function PUT(request: Request) {
   if (!context) return Response.json({ error: 'Unauthorized.' }, { status: 401 });
 
   try {
-    const { input, images, bbmodel, originalId, replaceCover } = parseCreationFormData(await request.formData());
+    const { input, images, bbmodel, viewer, originalId, replaceCover } = parseCreationFormData(await request.formData());
     if (!originalId) return Response.json({ error: 'originalId is required.' }, { status: 400 });
-    const result = await updateRemoteCreation(context.client, originalId, input, images, bbmodel, replaceCover);
+    const result = await updateRemoteCreation(context.client, originalId, input, images, bbmodel, viewer, replaceCover);
     return Response.json(result);
   } catch (error) {
     return errorResponse(error);

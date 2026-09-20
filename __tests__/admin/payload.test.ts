@@ -22,13 +22,23 @@ describe('parseCreationFormData', () => {
     expect(result.images).toHaveLength(1);
   });
 
-
-  it('parses one private bbmodel source attachment', () => {
+  it('parses a private source paired with its generated viewer', () => {
     const data = form();
     const source = new File(['{}'], 'Vorakh.bbmodel', { type: 'application/octet-stream' });
+    const viewer = new File(['glb'], 'model.glb', { type: 'model/gltf-binary' });
     data.set('bbmodel', source);
+    data.set('viewerModel', viewer);
+    data.set('viewerAnimationNames', JSON.stringify(['Idle', 'Attack', 'Idle']));
     const result = parseCreationFormData(data);
     expect(result.bbmodel?.name).toBe('Vorakh.bbmodel');
+    expect(result.viewer?.file.name).toBe('model.glb');
+    expect(result.viewer?.animationNames).toEqual(['Idle', 'Attack']);
+  });
+
+  it('rejects a new private source when its generated viewer is missing', () => {
+    const data = form();
+    data.set('bbmodel', new File(['{}'], 'Vorakh.bbmodel'));
+    expect(() => parseCreationFormData(data)).toThrow(/viewer/i);
   });
 
   it('rejects multiple private source attachments', () => {

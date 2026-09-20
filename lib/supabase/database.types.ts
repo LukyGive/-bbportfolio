@@ -63,6 +63,11 @@ export type Database = {
           tags: string[];
           updated_at: string;
           version: string | null;
+          viewer_animation_names: string[];
+          viewer_error: string | null;
+          viewer_model_path: string | null;
+          viewer_status: string;
+          viewer_updated_at: string | null;
         };
         Insert: {
           animations?: string[];
@@ -85,6 +90,11 @@ export type Database = {
           tags?: string[];
           updated_at?: string;
           version?: string | null;
+          viewer_animation_names?: string[];
+          viewer_error?: string | null;
+          viewer_model_path?: string | null;
+          viewer_status?: string;
+          viewer_updated_at?: string | null;
         };
         Update: {
           animations?: string[];
@@ -107,6 +117,11 @@ export type Database = {
           tags?: string[];
           updated_at?: string;
           version?: string | null;
+          viewer_animation_names?: string[];
+          viewer_error?: string | null;
+          viewer_model_path?: string | null;
+          viewer_status?: string;
+          viewer_updated_at?: string | null;
         };
         Relationships: [];
       };

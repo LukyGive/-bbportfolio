@@ -11,6 +11,8 @@ const base: Creation = {
 describe('public creation query contract', () => {
   it('never selects private bbmodel columns', () => {
     expect(PUBLIC_CREATION_SELECT).not.toMatch(/bbmodel_/i);
+    expect(PUBLIC_CREATION_SELECT).not.toMatch(/viewer_error/i);
+    expect(PUBLIC_CREATION_SELECT).toMatch(/viewer_model_path/);
   });
 
   it('orders featured entries by manual order, then date and name', () => {
