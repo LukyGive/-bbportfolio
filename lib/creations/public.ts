@@ -22,6 +22,9 @@ export const PUBLIC_CREATION_SELECT = `
   version,
   notes,
   cover_image_path,
+  viewer_model_path,
+  viewer_status,
+  viewer_animation_names,
   creation_images (
     id,
     creation_id,
