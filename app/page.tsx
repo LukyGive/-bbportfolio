@@ -3,8 +3,9 @@ import { Hero } from '@/components/portfolio/Hero';
 import { FeaturedGrid } from '@/components/portfolio/FeaturedGrid';
 import { CategoryShortcuts } from '@/components/portfolio/CategoryShortcuts';
 import { CreationGallery } from '@/components/portfolio/CreationGallery';
-import { getCategories, getFeaturedCreations, getPublishedCreations } from '@/lib/creations/read';
+import { getCategories, getFeaturedCreations, getPublishedCreations } from '@/lib/creations/public';
 
+export const dynamic = 'force-dynamic';
 export default async function HomePage() {
   const [featured, published, categories] = await Promise.all([
     getFeaturedCreations(),

@@ -22,6 +22,22 @@ describe('parseCreationFormData', () => {
     expect(result.images).toHaveLength(1);
   });
 
+
+  it('parses one private bbmodel source attachment', () => {
+    const data = form();
+    const source = new File(['{}'], 'Vorakh.bbmodel', { type: 'application/octet-stream' });
+    data.set('bbmodel', source);
+    const result = parseCreationFormData(data);
+    expect(result.bbmodel?.name).toBe('Vorakh.bbmodel');
+  });
+
+  it('rejects multiple private source attachments', () => {
+    const data = form();
+    data.append('bbmodel', new File(['1'], 'one.bbmodel'));
+    data.append('bbmodel', new File(['2'], 'two.bbmodel'));
+    expect(() => parseCreationFormData(data)).toThrow(/one \.bbmodel/i);
+  });
+
   it('rejects malformed JSON', () => {
     const data = new FormData();
     data.set('payload', '{');

@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { GalleryClient } from '@/components/portfolio/GalleryClient';
-import { getCategories, getPublishedCreations } from '@/lib/creations/read';
+import { getCategories, getPublishedCreations } from '@/lib/creations/public';
 
+export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'Creations',
   description: 'Browse Blockbench bosses, NPCs, mobs, items, weapons, tools and armor.',

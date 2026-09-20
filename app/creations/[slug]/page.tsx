@@ -4,13 +4,10 @@ import { notFound } from 'next/navigation';
 import { CreationGallery } from '@/components/portfolio/CreationGallery';
 import { CreationMeta } from '@/components/portfolio/CreationMeta';
 import { ImageGallery } from '@/components/portfolio/ImageGallery';
-import { getCreationBySlug, getPublishedCreations } from '@/lib/creations/read';
+import { getCreationBySlug, getPublishedCreations } from '@/lib/creations/public';
 import { getRelatedCreations } from '@/lib/creations/related';
 
-export async function generateStaticParams() {
-  return (await getPublishedCreations()).map((creation) => ({ slug: creation.slug }));
-}
-
+export const dynamic = 'force-dynamic';
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const creation = await getCreationBySlug(slug);
@@ -24,7 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function CreationPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const [creation, all] = await Promise.all([getCreationBySlug(slug), getPublishedCreations()]);
-  if (!creation) notFound();
+  if (!creation) return notFound();
   const related = getRelatedCreations(creation, all, 3);
 
   return (

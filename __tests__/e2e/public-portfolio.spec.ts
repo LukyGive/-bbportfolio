@@ -1,32 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-const draftId = 'e2e-hidden-draft';
-const draftPayload = {
-  id: draftId,
-  slug: draftId,
-  name: 'E2E Hidden Draft',
-  category: 'Boss',
-  tags: ['Hidden'],
-  description: 'Temporary test fixture',
-  coverImage: '/models/_placeholder/creation-placeholder.svg',
-  images: [],
-  animations: [],
-  featured: false,
-  published: false,
-  createdAt: '2026-09-20',
-};
-
-test.beforeEach(async ({ request }) => {
-  const form = { payload: JSON.stringify(draftPayload) };
-  const response = await request.post('/api/admin/creations', { multipart: form });
-  if (![201, 409].includes(response.status())) throw new Error(`Could not seed draft fixture: ${response.status()}`);
-});
-
-test.afterEach(async ({ request }) => {
-  await request.delete('/api/admin/creations', { data: { id: draftId } }).catch(() => undefined);
-});
-
-test('public portfolio browsing works without exposing drafts', async ({ page }) => {
+test('public portfolio browsing works without admin access', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /characters, creatures/i })).toBeVisible();
   await expect(page.getByText('Featured creations')).toBeVisible();
@@ -43,9 +17,16 @@ test('public portfolio browsing works without exposing drafts', async ({ page })
   await page.goto('/creations/vorakh');
   await expect(page.getByRole('heading', { name: 'Vorakh' })).toBeVisible();
   await expect(page.getByText('Animations')).toBeVisible();
+  await expect(page.getByText(/\.bbmodel/i)).toHaveCount(0);
 
-  const draftResponse = await page.goto(`/creations/${draftId}`);
-  expect(draftResponse?.status()).toBe(404);
+  const missing = await page.goto('/creations/definitely-not-a-real-creation');
+  expect(missing?.status()).toBe(404);
+});
+
+test('signed-out admin redirects to login', async ({ page }) => {
+  await page.goto('/admin');
+  await expect(page).toHaveURL(/\/admin\/login$/);
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });
 
 test('mobile layout has no horizontal overflow', async ({ page }) => {

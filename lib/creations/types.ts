@@ -18,8 +18,24 @@ export type Creation = {
   notes?: string;
 };
 
+export type AdminCreation = Creation & {
+  galleryImages: AdminGalleryImage[];
+  bbmodel?: {
+    filename: string;
+    size: number;
+  };
+};
+
 export type CreationInput = Omit<Creation, 'id' | 'slug' | 'createdAt'> & {
   id?: string;
   slug?: string;
   createdAt?: string;
+};
+
+
+export type AdminGalleryImage = {
+  id: string;
+  url: string;
+  altText: string;
+  sortOrder: number;
 };

@@ -1,57 +1,63 @@
-import { createCreation, deleteCreation, updateCreation } from '@/lib/admin/storage';
+import { getAdminContext } from '@/lib/auth/server';
 import { parseCreationFormData } from '@/lib/admin/payload';
+import { createRemoteCreation, deleteRemoteCreation, updateRemoteCreation } from '@/lib/admin/remote';
 
 export const runtime = 'nodejs';
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : 'Unexpected error.';
-  if (/duplicate/i.test(message)) return Response.json({ error: message }, { status: 409 });
+  if (/already exists|duplicate/i.test(message)) return Response.json({ error: message }, { status: 409 });
   if (/not found/i.test(message)) return Response.json({ error: message }, { status: 404 });
-  if (/required|invalid|unsafe|image|slug|filename|payload|json|maximum|10 mb|unsupported/i.test(message)) {
+  if (/required|invalid|unsafe|image|slug|filename|payload|json|maximum|10 mb|50 mb|unsupported|bbmodel/i.test(message)) {
     return Response.json({ error: message }, { status: 400 });
   }
-  console.error('[admin] creation mutation failed', error instanceof Error ? error.message : error);
-  return Response.json({ error: 'Could not update the local portfolio.' }, { status: 500 });
+  console.error('[admin] creation mutation failed', message);
+  return Response.json({ error: 'Could not update the portfolio.' }, { status: 500 });
+}
+
+async function authorized() {
+  const context = await getAdminContext();
+  if (!context) return null;
+  return context;
 }
 
 export async function POST(request: Request) {
-  if (process.env.NODE_ENV !== 'development') {
-    return Response.json({ error: 'Admin writes are disabled.' }, { status: 404 });
-  }
+  const context = await authorized();
+  if (!context) return Response.json({ error: 'Unauthorized.' }, { status: 401 });
+
   try {
-    const { input, images } = parseCreationFormData(await request.formData());
-    const creation = await createCreation(input, images);
-    return Response.json({ creation }, { status: 201 });
+    const { input, images, bbmodel } = parseCreationFormData(await request.formData());
+    const result = await createRemoteCreation(context.client, input, images, bbmodel);
+    return Response.json(result, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }
 }
 
 export async function PUT(request: Request) {
-  if (process.env.NODE_ENV !== 'development') {
-    return Response.json({ error: 'Admin writes are disabled.' }, { status: 404 });
-  }
+  const context = await authorized();
+  if (!context) return Response.json({ error: 'Unauthorized.' }, { status: 401 });
+
   try {
-    const { input, images, originalId } = parseCreationFormData(await request.formData());
+    const { input, images, bbmodel, originalId, replaceCover } = parseCreationFormData(await request.formData());
     if (!originalId) return Response.json({ error: 'originalId is required.' }, { status: 400 });
-    const creation = await updateCreation(originalId, input, images);
-    return Response.json({ creation });
+    const result = await updateRemoteCreation(context.client, originalId, input, images, bbmodel, replaceCover);
+    return Response.json(result);
   } catch (error) {
     return errorResponse(error);
   }
 }
 
 export async function DELETE(request: Request) {
-  if (process.env.NODE_ENV !== 'development') {
-    return Response.json({ error: 'Admin writes are disabled.' }, { status: 404 });
-  }
+  const context = await authorized();
+  if (!context) return Response.json({ error: 'Unauthorized.' }, { status: 401 });
+
   try {
     const body = await request.json().catch(() => null) as { id?: unknown } | null;
     if (!body || typeof body.id !== 'string' || !body.id.trim()) {
       return Response.json({ error: 'Creation id is required.' }, { status: 400 });
     }
-    await deleteCreation(body.id.trim());
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, ...(await deleteRemoteCreation(context.client, body.id.trim())) });
   } catch (error) {
     return errorResponse(error);
   }
