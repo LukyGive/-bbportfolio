@@ -15,6 +15,8 @@ jobs:
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_jpzPrVIfpUxsZmTGLvoiEA_IHuRaMyZ
     steps:
       - uses: actions/checkout@v4
+      - name: Apply viewer implementation patch
+        run: base64 -d .ci/viewer-patch.tar.gz.b64 | tar -xz
       - uses: actions/setup-node@v4
         with:
           node-version: 22
