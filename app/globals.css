@@ -137,14 +137,63 @@ img { max-width: 100%; }
 }
 
 /* Creation detail */
-.detail-page { padding-top: clamp(45px, 6vw, 80px); }
-.detail-back { display: inline-flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; margin-bottom: clamp(50px, 8vw, 100px); }
-.detail-header { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .55fr); align-items: end; gap: clamp(35px, 7vw, 100px); margin-bottom: clamp(42px, 6vw, 74px); }
-.detail-header h1 { margin: 12px 0 0; font-size: clamp(56px, 9vw, 118px); line-height: .9; letter-spacing: -.07em; font-weight: 580; }
-.detail-header p { color: var(--muted); line-height: 1.75; font-size: 15px; margin: 0 0 4px; }
-.detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: clamp(28px, 5vw, 70px); align-items: start; }
-.detail-gallery { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.detail-image { position: relative; aspect-ratio: 1.2 / 1; overflow: hidden; border-radius: var(--radius); background: var(--surface); border: 1px solid rgba(255,255,255,.06); }
+.detail-page { padding-top: clamp(32px, 4vw, 56px); }
+
+.detail-back {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: clamp(18px, 2.8vw, 34px);
+}
+
+.detail-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, .55fr);
+  align-items: end;
+  gap: clamp(24px, 5vw, 72px);
+  margin-bottom: clamp(28px, 4vw, 52px);
+}
+
+.detail-header h1 {
+  margin: 8px 0 0;
+  font-size: clamp(56px, 9vw, 118px);
+  line-height: .9;
+  letter-spacing: -.07em;
+  font-weight: 580;
+}
+
+.detail-header p {
+  color: var(--muted);
+  line-height: 1.75;
+  font-size: 15px;
+  margin: 0;
+}
+
+.detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: clamp(28px, 5vw, 70px);
+  align-items: start;
+}
+
+.detail-gallery {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.detail-image {
+  position: relative;
+  aspect-ratio: 1.2 / 1;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,.06);
+}
+
 .detail-image-main { grid-column: 1 / -1; aspect-ratio: 1.52 / 1; }
 .detail-image img { object-fit: cover; }
 .detail-sidebar { position: sticky; top: 24px; border-top: 1px solid var(--border); }
