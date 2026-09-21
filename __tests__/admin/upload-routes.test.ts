@@ -40,6 +40,26 @@ describe('direct upload authorization', () => {
     expect(result.uploads[0].path).toContain(`uploads/${userId}/${result.sessionId}/`);
   });
 
+
+  it('authorizes a bbpreview viewer in the existing viewer-models bucket', async () => {
+    const { client } = fakeStorageClient();
+    const result = await authorizeUploadBatch(client as never, userId, [{
+      clientKey: 'viewer',
+      kind: 'viewer',
+      filename: 'preview.bbpreview',
+      size: 2048,
+      contentType: 'application/json',
+    }]);
+    expect(result.uploads[0]).toMatchObject({
+      clientKey: 'viewer',
+      kind: 'viewer',
+      bucket: 'viewer-models',
+      filename: 'preview.bbpreview',
+      contentType: 'application/json',
+    });
+    expect(result.uploads[0].path).toMatch(/\.bbpreview$/i);
+  });
+
   it('rejects more than twenty renders', async () => {
     const { client } = fakeStorageClient();
     const requests = Array.from({ length: 21 }, (_, index) => ({

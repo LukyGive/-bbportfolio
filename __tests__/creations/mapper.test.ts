@@ -22,11 +22,11 @@ const row = {
   bbmodel_path: '7c00/vorakh.bbmodel',
   bbmodel_filename: 'vorakh.bbmodel',
   bbmodel_size: 123,
-  viewer_model_path: '7c00/model.glb',
-  viewer_status: 'ready',
+  viewer_model_path: null,
+  viewer_status: 'none',
   viewer_error: null,
-  viewer_updated_at: '2026-09-20T00:00:00Z',
-  viewer_animation_names: ['animation.idle', 'attack'],
+  viewer_updated_at: null,
+  viewer_animation_names: [],
   creation_images: [
     { id: 'i2', creation_id: 'x', storage_path: '7c00/gallery/2.webp', alt_text: '', sort_order: 2, created_at: '2026-09-20' },
     { id: 'i1', creation_id: 'x', storage_path: '7c00/gallery/1.webp', alt_text: '', sort_order: 1, created_at: '2026-09-20' },
@@ -38,8 +38,25 @@ describe('creation mappers', () => {
     const result = mapPublicCreation(row as never, 'https://example.supabase.co');
     expect(JSON.stringify(result)).not.toMatch(/bbmodel/i);
     expect(result.images[0]).toContain('/1.webp');
-    expect(result.viewer?.modelUrl).toContain('/viewer-models/7c00/model.glb');
-    expect(result.viewer?.animationNames).toEqual(['animation.idle', 'attack']);
+  });
+
+
+  it('infers Viewer V2 and legacy formats from the stored viewer path', () => {
+    const v2 = mapPublicCreation({
+      ...row,
+      viewer_status: 'ready',
+      viewer_model_path: 'uploads/user/session/preview.bbpreview',
+      viewer_animation_names: ['Idle'],
+    } as never, 'https://example.supabase.co');
+    expect(v2.viewer).toMatchObject({ format: 'bbpreview', animationNames: ['Idle'] });
+
+    const legacy = mapPublicCreation({
+      ...row,
+      viewer_status: 'ready',
+      viewer_model_path: 'uploads/user/session/model.glb',
+      viewer_animation_names: [],
+    } as never, 'https://example.supabase.co');
+    expect(legacy.viewer).toMatchObject({ format: 'glb' });
   });
 
   it('exposes only safe private attachment metadata to admin UI', () => {
@@ -47,11 +64,5 @@ describe('creation mappers', () => {
     expect(result.bbmodel).toEqual({ filename: 'vorakh.bbmodel', size: 123 });
     expect(result.galleryImages.map((image) => image.id)).toEqual(['i1', 'i2']);
     expect(JSON.stringify(result)).not.toContain('7c00/vorakh.bbmodel');
-    expect(result.viewerStatus).toBe('ready');
-  });
-
-  it('does not expose a viewer unless the derivative is ready', () => {
-    const result = mapPublicCreation({ ...row, viewer_status: 'error' } as never, 'https://example.supabase.co');
-    expect(result.viewer).toBeUndefined();
   });
 });

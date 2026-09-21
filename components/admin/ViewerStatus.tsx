@@ -42,15 +42,15 @@ export function ViewerStatus({
       const sourceResponse = await fetch(`/api/admin/bbmodel/${creationId}`);
       if (!sourceResponse.ok) throw new Error('Could not load private Blockbench source.');
       const source = new File([await sourceResponse.blob()], sourceFilename, { type: 'application/json' });
-      const { convertBbmodelToViewer } = await import('@/lib/viewer/convert');
-      const artifact = await convertBbmodelToViewer(source);
+      const { extractBbmodelPreview } = await import('@/lib/viewer-v2/extract');
+      const artifact = await extractBbmodelPreview(source);
 
       const authorization = await authorizeUploads([{
         clientKey: 'viewer',
         kind: 'viewer',
         filename: artifact.file.name,
         size: artifact.file.size,
-        contentType: 'model/gltf-binary',
+        contentType: artifact.file.type || 'application/json',
       }]);
       const descriptor = authorization.uploads.find((item) => item.clientKey === 'viewer');
       if (!descriptor) throw new Error('Viewer upload authorization is missing.');
@@ -93,15 +93,15 @@ export function ViewerStatus({
   return (
     <div className="admin-viewer-status">
       <div>
-        {status === 'ready' && <strong>✓ 3D viewer generated</strong>}
-        {status === 'processing' && <strong>Generating 3D viewer…</strong>}
-        {status === 'error' && <strong>Viewer conversion failed</strong>}
-        {status === 'none' && <strong>No 3D viewer generated</strong>}
+        {status === 'ready' && <strong>✓ 3D preview generated</strong>}
+        {status === 'processing' && <strong>Generating 3D preview…</strong>}
+        {status === 'error' && <strong>Preview generation failed</strong>}
+        {status === 'none' && <strong>No 3D preview generated</strong>}
         {status === 'ready' && <small>{animationCount} {animationCount === 1 ? 'animation' : 'animations'}</small>}
         {(localError || error) && <small className="admin-viewer-error">{localError || error}</small>}
       </div>
       <button className="admin-button secondary" type="button" disabled={working} onClick={() => void regenerate()}>
-        {working ? (progress === null ? 'Generating…' : `Uploading… ${progress}%`) : 'Regenerate viewer'}
+        {working ? (progress === null ? 'Generating…' : `Uploading… ${progress}%`) : 'Regenerate V2 preview'}
       </button>
     </div>
   );

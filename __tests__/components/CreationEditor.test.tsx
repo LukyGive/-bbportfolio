@@ -12,10 +12,10 @@ const directUpload = vi.hoisted(() => ({
     return ref;
   }),
 }));
-const viewerConvert = vi.hoisted(() => ({ convertBbmodelToViewer: vi.fn() }));
+const viewerExtract = vi.hoisted(() => ({ extractBbmodelPreview: vi.fn() }));
 
 vi.mock('@/lib/admin/direct-upload', () => directUpload);
-vi.mock('@/lib/viewer/convert', () => viewerConvert);
+vi.mock('@/lib/viewer-v2/extract', () => viewerExtract);
 
 const originalFetch = global.fetch;
 afterEach(() => {
@@ -28,11 +28,11 @@ const userId = '11111111-1111-4111-8111-111111111111';
 const sessionId = '22222222-2222-4222-8222-222222222222';
 
 function authorized(kind: 'render' | 'bbmodel' | 'viewer', clientKey: string, filename: string, size: number) {
-  const ext = kind === 'render' ? 'png' : kind === 'bbmodel' ? 'bbmodel' : 'glb';
+  const ext = kind === 'render' ? 'png' : kind === 'bbmodel' ? 'bbmodel' : filename.toLowerCase().endsWith('.bbpreview') ? 'bbpreview' : 'glb';
   const bucket = kind === 'render' ? 'portfolio-renders' : kind === 'bbmodel' ? 'bbmodels' : 'viewer-models';
   return {
     clientKey, kind, filename, size,
-    contentType: kind === 'render' ? 'image/png' : kind === 'viewer' ? 'model/gltf-binary' : 'application/octet-stream',
+    contentType: kind === 'render' ? 'image/png' : kind === 'viewer' ? (ext === 'bbpreview' ? 'application/json' : 'model/gltf-binary') : 'application/octet-stream',
     bucket,
     path: `uploads/${userId}/${sessionId}/33333333-3333-4333-8333-333333333333.${ext}`,
     token: `${kind}-token`,
@@ -105,10 +105,10 @@ describe('CreationEditor', () => {
 
   it('cleans only successful uploads when a later upload fails', async () => {
     const source = new File(['{}'], 'Vorakh.bbmodel', { type: 'application/octet-stream' });
-    const viewerFile = new File(['glb'], 'model.glb', { type: 'model/gltf-binary' });
+    const viewerFile = new File(['{}'], 'preview.bbpreview', { type: 'application/json' });
     const sourceDescriptor = authorized('bbmodel', 'bbmodel', source.name, source.size);
     const viewerDescriptor = authorized('viewer', 'viewer', viewerFile.name, viewerFile.size);
-    viewerConvert.convertBbmodelToViewer.mockResolvedValue({ file: viewerFile, animationNames: [], warnings: [] });
+    viewerExtract.extractBbmodelPreview.mockResolvedValue({ file: viewerFile, animationNames: [], diagnostics: { meshes: 1, vertices: 24, triangles: 12, textures: 1, nodes: 1, animations: 0 } });
     directUpload.authorizeUploads.mockResolvedValue({ sessionId, uploads: [sourceDescriptor, viewerDescriptor] });
     directUpload.uploadAuthorizedFile
       .mockResolvedValueOnce(undefined)
@@ -121,6 +121,10 @@ describe('CreationEditor', () => {
     await userEvent.click(screen.getByRole('button', { name: /save creation/i }));
 
     await waitFor(() => expect(directUpload.cleanupAuthorizedUploads).toHaveBeenCalledTimes(1));
+    expect(viewerExtract.extractBbmodelPreview).toHaveBeenCalledWith(source);
+    expect(directUpload.authorizeUploads).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ kind: 'viewer', filename: 'preview.bbpreview', contentType: 'application/json' }),
+    ]));
     expect(directUpload.cleanupAuthorizedUploads).toHaveBeenCalledWith([
       expect.objectContaining({ clientKey: 'bbmodel', path: sourceDescriptor.path }),
     ]);

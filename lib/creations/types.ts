@@ -1,6 +1,7 @@
 export type ViewerInfo = {
   modelUrl: string;
   animationNames: string[];
+  format: 'bbpreview' | 'glb';
 };
 
 export type ViewerStatus = 'none' | 'processing' | 'ready' | 'error';

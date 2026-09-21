@@ -2,6 +2,7 @@ import Image from 'next/image';
 import type { Creation } from '@/lib/creations/types';
 import { ImageGallery } from './ImageGallery';
 import { ModelViewer } from './ModelViewer';
+import { ModelViewerV2 } from './ModelViewerV2';
 
 export function CreationVisuals({ creation }: { creation: Creation }) {
   if (!creation.viewer) return <ImageGallery creation={creation} />;
@@ -15,11 +16,19 @@ export function CreationVisuals({ creation }: { creation: Creation }) {
 
   return (
     <div className="detail-gallery">
-      <ModelViewer
-        modelUrl={creation.viewer.modelUrl}
-        creationName={creation.name}
-        fallbackImage={creation.coverImage}
-      />
+      {creation.viewer.format === 'bbpreview' ? (
+        <ModelViewerV2
+          modelUrl={creation.viewer.modelUrl}
+          creationName={creation.name}
+          fallbackImage={creation.coverImage}
+        />
+      ) : (
+        <ModelViewer
+          modelUrl={creation.viewer.modelUrl}
+          creationName={creation.name}
+          fallbackImage={creation.coverImage}
+        />
+      )}
 
       {galleryImages.map((image, index) => (
         <div className="detail-image" key={image}>

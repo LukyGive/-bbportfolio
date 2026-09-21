@@ -4,7 +4,13 @@ import type { Creation } from '@/lib/creations/types';
 
 vi.mock('@/components/portfolio/ModelViewer', () => ({
   ModelViewer: ({ creationName }: { creationName: string }) => (
-    <div aria-label={`${creationName} interactive 3D model`} />
+    <div aria-label={`${creationName} legacy 3D model`} />
+  ),
+}));
+
+vi.mock('@/components/portfolio/ModelViewerV2', () => ({
+  ModelViewerV2: ({ creationName }: { creationName: string }) => (
+    <div aria-label={`${creationName} Viewer V2 model`} />
   ),
 }));
 
@@ -17,17 +23,28 @@ const creation: Creation = {
 };
 
 describe('CreationVisuals', () => {
-  it('renders the viewer first when viewer metadata exists', () => {
+  it('uses Viewer V2 for .bbpreview metadata', () => {
     render(<CreationVisuals creation={{
       ...creation,
-      viewer: { modelUrl: 'https://example.com/model.glb', animationNames: ['Idle'] },
+      viewer: { modelUrl: 'https://example.com/preview.bbpreview', animationNames: ['Idle'], format: 'bbpreview' },
     }} />);
-    expect(screen.getByLabelText(/interactive 3d model/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/viewer v2 model/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/legacy 3d model/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps the legacy viewer for GLB metadata', () => {
+    render(<CreationVisuals creation={{
+      ...creation,
+      viewer: { modelUrl: 'https://example.com/model.glb', animationNames: ['Idle'], format: 'glb' },
+    }} />);
+    expect(screen.getByLabelText(/legacy 3d model/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/viewer v2 model/i)).not.toBeInTheDocument();
   });
 
   it('uses the image gallery when no viewer exists', () => {
     render(<CreationVisuals creation={creation} />);
-    expect(screen.queryByLabelText(/interactive 3d model/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/viewer v2 model/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/legacy 3d model/i)).not.toBeInTheDocument();
     expect(screen.getByAltText(/main render/i)).toBeInTheDocument();
   });
 });

@@ -267,90 +267,15 @@ img { max-width: 100%; }
 .text-link.danger { color: #f08d8d; }
 .admin-cover-choice { margin-top: .8rem; }
 
-.creation-card-media,
-.detail-image,
-.model-thumbnail,
-.model-viewer {
-  background-color: #0f1217;
-}
-
-.creation-card-media::before,
-.detail-image::before,
-.model-thumbnail::before,
-.model-viewer::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px),
-    radial-gradient(circle at 78% 18%, rgba(255,255,255,.05), transparent 24%),
-    linear-gradient(180deg, rgba(255,255,255,.018), transparent 42%);
-  background-size: 18px 18px, 18px 18px, auto, auto;
-  opacity: .38;
-  z-index: 0;
-}
-
-.creation-card-media > *,
-.detail-image > *,
-.model-thumbnail > *,
-.model-viewer > * {
-  position: relative;
-  z-index: 1;
-}
-
-.creation-card-media {
-  position: relative;
-  aspect-ratio: 1.38 / 1;
-  overflow: hidden;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid rgba(255,255,255,.06);
-}
-
-.creation-card-media img {
-  object-fit: cover;
-  transition: transform .55s cubic-bezier(.2,.75,.25,1), filter .4s ease;
-}
-
-.model-thumbnail {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
-
-.model-thumbnail-canvas {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
-  position: relative;
-  z-index: 1;
-}
-
-.model-thumbnail-badge {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 2;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(9,10,13,.72);
-  border: 1px solid var(--border);
-  color: #d5d8df;
-  font-size: 10px;
-  letter-spacing: .1em;
-  backdrop-filter: blur(8px);
-}
-
-.model-thumbnail-fallback {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  text-align: center;
-  color: var(--soft);
-  font-size: 12px;
-}
+/* Interactive 3D viewer */
+.model-viewer { isolation: isolate; }
+.model-viewer-stage { position: absolute; inset: 0; z-index: 1; touch-action: none; }
+.model-viewer-stage canvas, .model-viewer-canvas { width: 100%; height: 100%; display: block; }
+.model-viewer-fallback { position: absolute; inset: 0; z-index: 2; opacity: 1; pointer-events: none; transition: opacity .24s ease; background: var(--surface); }
+.model-viewer-fallback.is-hidden { opacity: 0; }
+.model-viewer-fallback img { object-fit: cover; }
+.model-viewer-loading { position: absolute; left: 16px; bottom: 16px; z-index: 3; padding: 8px 10px; border: 1px solid var(--border); border-radius: 999px; background: rgba(9,10,13,.72); color: var(--muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; backdrop-filter: blur(8px); pointer-events: none; }
+.model-viewer-controls { position: absolute; right: 14px; bottom: 14px; z-index: 4; display: flex; align-items: center; gap: 7px; padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: rgba(9,10,13,.78); backdrop-filter: blur(10px); }
+.model-viewer-control-button, .model-viewer-controls select { min-height: 34px; border: 1px solid var(--border); border-radius: 8px; background: #11141a; color: var(--soft); font-size: 10px; }
+.model-viewer-control-button { width: 36px; cursor: pointer; }
+.model-viewer-controls select { padding: 0 28px 0 10px; cursor: pointer; }

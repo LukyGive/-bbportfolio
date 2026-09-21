@@ -12,10 +12,10 @@ const directUpload = vi.hoisted(() => ({
     return ref;
   }),
 }));
-const viewerConvert = vi.hoisted(() => ({ convertBbmodelToViewer: vi.fn() }));
+const viewerExtract = vi.hoisted(() => ({ extractBbmodelPreview: vi.fn() }));
 
 vi.mock('@/lib/admin/direct-upload', () => directUpload);
-vi.mock('@/lib/viewer/convert', () => viewerConvert);
+vi.mock('@/lib/viewer-v2/extract', () => viewerExtract);
 
 const originalFetch = global.fetch;
 afterEach(() => {
@@ -26,9 +26,9 @@ afterEach(() => {
 
 function viewerDescriptor(size: number) {
   return {
-    clientKey: 'viewer', kind: 'viewer', filename: 'model.glb', size,
-    contentType: 'model/gltf-binary', bucket: 'viewer-models',
-    path: 'uploads/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222/33333333-3333-4333-8333-333333333333.glb',
+    clientKey: 'viewer', kind: 'viewer', filename: 'preview.bbpreview', size,
+    contentType: 'application/json', bucket: 'viewer-models',
+    path: 'uploads/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222/33333333-3333-4333-8333-333333333333.bbpreview',
     token: 'signed-token',
   };
 }
@@ -36,22 +36,22 @@ function viewerDescriptor(size: number) {
 describe('ViewerStatus', () => {
   it('shows ready state and animation count', () => {
     render(<ViewerStatus creationId="abc" sourceFilename="model.bbmodel" status="ready" animationCount={4} onRegenerated={vi.fn()} />);
-    expect(screen.getByText(/3D viewer generated/i)).toBeInTheDocument();
+    expect(screen.getByText(/3D preview generated/i)).toBeInTheDocument();
     expect(screen.getByText(/4 animations/i)).toBeInTheDocument();
   });
 
   it('shows conversion errors without exposing storage paths', () => {
     render(<ViewerStatus creationId="abc" sourceFilename="model.bbmodel" status="error" error="Unsupported Blockbench element" animationCount={0} />);
-    expect(screen.getByText(/conversion failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/preview generation failed/i)).toBeInTheDocument();
     expect(screen.getByText(/unsupported blockbench element/i)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/viewer-models\//i);
   });
 
   it('regenerates with direct viewer upload and JSON finalization', async () => {
     const sourceBlob = new Blob(['{}'], { type: 'application/json' });
-    const viewerFile = new File(['glb'], 'model.glb', { type: 'model/gltf-binary' });
+    const viewerFile = new File(['{}'], 'preview.bbpreview', { type: 'application/json' });
     const descriptor = viewerDescriptor(viewerFile.size);
-    viewerConvert.convertBbmodelToViewer.mockResolvedValue({ file: viewerFile, animationNames: ['Idle'], warnings: [] });
+    viewerExtract.extractBbmodelPreview.mockResolvedValue({ file: viewerFile, animationNames: ['Idle'], diagnostics: { meshes: 1, vertices: 24, triangles: 12, textures: 1, nodes: 1, animations: 1 } });
     directUpload.authorizeUploads.mockResolvedValue({ sessionId: 'session', uploads: [descriptor] });
     directUpload.uploadAuthorizedFile.mockResolvedValue(undefined);
 
@@ -61,10 +61,14 @@ describe('ViewerStatus', () => {
     global.fetch = fetchMock as typeof fetch;
 
     render(<ViewerStatus creationId="creation-id" sourceFilename="model.bbmodel" status="ready" animationCount={1} onRegenerated={vi.fn()} />);
-    await userEvent.click(screen.getByRole('button', { name: /regenerate viewer/i }));
+    await userEvent.click(screen.getByRole('button', { name: /regenerate v2 preview/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/bbmodel/creation-id');
+    expect(viewerExtract.extractBbmodelPreview).toHaveBeenCalled();
+    expect(directUpload.authorizeUploads).toHaveBeenCalledWith([
+      expect.objectContaining({ kind: 'viewer', filename: 'preview.bbpreview', contentType: 'application/json' }),
+    ]);
     expect(directUpload.uploadAuthorizedFile).toHaveBeenCalledWith(descriptor, viewerFile, expect.any(Object));
     expect(fetchMock.mock.calls[1][0]).toBe('/api/admin/viewer/creation-id');
     const init = fetchMock.mock.calls[1][1];
@@ -75,9 +79,9 @@ describe('ViewerStatus', () => {
 
   it('does not delete a new viewer after finalization starts and the response is lost', async () => {
     const sourceBlob = new Blob(['{}'], { type: 'application/json' });
-    const viewerFile = new File(['glb'], 'model.glb', { type: 'model/gltf-binary' });
+    const viewerFile = new File(['{}'], 'preview.bbpreview', { type: 'application/json' });
     const descriptor = viewerDescriptor(viewerFile.size);
-    viewerConvert.convertBbmodelToViewer.mockResolvedValue({ file: viewerFile, animationNames: [], warnings: [] });
+    viewerExtract.extractBbmodelPreview.mockResolvedValue({ file: viewerFile, animationNames: [], diagnostics: { meshes: 1, vertices: 24, triangles: 12, textures: 1, nodes: 1, animations: 0 } });
     directUpload.authorizeUploads.mockResolvedValue({ sessionId: 'session', uploads: [descriptor] });
     directUpload.uploadAuthorizedFile.mockResolvedValue(undefined);
     global.fetch = vi.fn()
@@ -86,7 +90,7 @@ describe('ViewerStatus', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) }) as typeof fetch;
 
     render(<ViewerStatus creationId="creation-id" sourceFilename="model.bbmodel" status="ready" animationCount={0} />);
-    await userEvent.click(screen.getByRole('button', { name: /regenerate viewer/i }));
+    await userEvent.click(screen.getByRole('button', { name: /regenerate v2 preview/i }));
 
     await waitFor(() => expect(screen.getByText(/network response lost/i)).toBeInTheDocument());
     expect(directUpload.cleanupAuthorizedUploads).not.toHaveBeenCalled();

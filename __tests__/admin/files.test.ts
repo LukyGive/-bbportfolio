@@ -97,3 +97,18 @@ it('rejects an actual uploaded viewer above 50 MiB', async () => {
     filename: 'model.glb', size: 100, contentType: 'model/gltf-binary',
   })).rejects.toThrow(/50 MiB/i);
 });
+
+
+it('creates immutable bbpreview viewer paths without breaking GLB paths', async () => {
+  const { createAuthorizedObjectPath } = await import('@/lib/admin/files');
+  const userId = '11111111-1111-4111-8111-111111111111';
+  const sessionId = '22222222-2222-4222-8222-222222222222';
+  const previewPath = createAuthorizedObjectPath(userId, sessionId, {
+    clientKey: 'viewer', kind: 'viewer', filename: 'preview.bbpreview', size: 100, contentType: 'application/json',
+  });
+  const legacyPath = createAuthorizedObjectPath(userId, sessionId, {
+    clientKey: 'viewer', kind: 'viewer', filename: 'model.glb', size: 100, contentType: 'model/gltf-binary',
+  });
+  expect(previewPath).toMatch(/\.bbpreview$/i);
+  expect(legacyPath).toMatch(/\.glb$/i);
+});
