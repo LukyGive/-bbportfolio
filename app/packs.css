@@ -179,3 +179,24 @@
   .pack-picker-row-main { flex-basis: calc(100% - 32px); }
   .pack-picker-controls { width: 100%; padding-left: 26px; }
 }
+
+/* 3D pack mosaic fallback ------------------------------------------------ */
+/* When a creation has no 2D render, reuse the same centered viewer thumbnail
+ * as the normal creation cards. The tile itself stays the viewport so the
+ * thumbnail can calculate its camera framing from the model bounds. */
+.pack-mosaic-tile-3d > .model-thumbnail,
+.pack-mosaic-tile-3d > .model-thumbnail-v2 {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.pack-mosaic-tile-3d > .model-thumbnail canvas,
+.pack-mosaic-tile-3d > .model-thumbnail-v2 canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}

@@ -1,8 +1,6 @@
 import Image from 'next/image';
 import type { Pack } from '@/lib/packs/types';
 import { getMosaicCreations } from '@/lib/packs/stats';
-import { ModelThumbnail } from '@/components/portfolio/ModelThumbnail';
-import { ModelThumbnailV2 } from '@/components/portfolio/ModelThumbnailV2';
 
 const PLACEHOLDER = '/models/_placeholder/creation-placeholder.svg';
 
@@ -34,7 +32,6 @@ export function PackMosaic({
   }
 
   const tiles = getMosaicCreations(pack.creations);
-
   return (
     <div
       className={`${className} pack-mosaic pack-mosaic-auto pack-mosaic-count-${tiles.length}`.trim()}
@@ -47,33 +44,11 @@ export function PackMosaic({
           ? creation.coverImage
           : creation.images?.[0];
 
-        if (render) {
-          return (
-            <div className="pack-mosaic-tile" key={creation.id}>
-              <Image src={render} alt="" fill sizes="25vw" />
-            </div>
-          );
-        }
-
-        if (creation.viewer) {
-          return (
-            <div className="pack-mosaic-tile pack-mosaic-tile-3d" key={creation.id}>
-              {creation.viewer.format === 'bbpreview' ? (
-                <ModelThumbnailV2
-                  modelUrl={creation.viewer.modelUrl}
-                  creationName={creation.name}
-                />
-              ) : (
-                <ModelThumbnail
-                  modelUrl={creation.viewer.modelUrl}
-                  creationName={creation.name}
-                />
-              )}
-            </div>
-          );
-        }
-
-        return (
+        return render ? (
+          <div className="pack-mosaic-tile" key={creation.id}>
+            <Image src={render} alt="" fill sizes="25vw" />
+          </div>
+        ) : (
           <div className="pack-mosaic-tile pack-mosaic-fallback" key={creation.id}>
             <strong>{creation.name}</strong>
             <span>{creation.category}</span>
