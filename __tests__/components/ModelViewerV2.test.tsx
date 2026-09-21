@@ -220,10 +220,10 @@ describe('ModelViewerV2', () => {
     runtime.buildPreviewScene.mockResolvedValue(built);
     render(<ModelViewerV2 modelUrl="https://example.com/preview.bbpreview" creationName="Vorakh" fallbackImage="/vorakh.png" />);
 
-    await waitFor(() => expect(screen.getByLabelText(/animation/i)).toHaveValue('Idle'));
+    await waitFor(() => expect(screen.getByLabelText(/^animation$/i)).toHaveValue('Idle'));
     expect(built.actions.get('Idle')?.play).toHaveBeenCalledTimes(1);
 
-    await userEvent.selectOptions(screen.getByLabelText(/animation/i), 'Attack');
+    await userEvent.selectOptions(screen.getByLabelText(/^animation$/i), 'Attack');
     expect(built.actions.get('Attack')?.setLoop).toHaveBeenCalledWith(three.LoopOnce, 1);
     expect(built.actions.get('Attack')?.play).toHaveBeenCalledTimes(1);
 
@@ -231,7 +231,7 @@ describe('ModelViewerV2', () => {
       built.listeners.get('finished')?.({ action: built.actions.get('Attack')! });
     });
     expect(built.actions.get('Idle')?.play).toHaveBeenCalledTimes(2);
-    expect(screen.getByLabelText(/animation/i)).toHaveValue('Idle');
+    expect(screen.getByLabelText(/^animation$/i)).toHaveValue('Idle');
   });
 
   it('disposes the renderer, controls and built scene on unmount', async () => {

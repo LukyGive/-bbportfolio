@@ -48,8 +48,8 @@ describe('viewer v2 animations', () => {
     const armId = hierarchy.nodeIdBySourceUuid.get('arm');
     expect(result[0].loop).toBe(true);
     expect(result[0].tracks).toEqual(expect.arrayContaining([
-      expect.objectContaining({ nodeId: armId, channel: 'position', values: [9, 10, 11] }),
-      expect.objectContaining({ nodeId: armId, channel: 'scale', values: [2, 3, 4] }),
+      expect.objectContaining({ nodeId: armId, channel: 'position', values: [9, 10, 11, 9, 10, 11] }),
+      expect.objectContaining({ nodeId: armId, channel: 'scale', values: [2, 3, 4, 2, 3, 4] }),
     ]));
     const rotation = result[0].tracks.find((track) => track.channel === 'rotation')!;
     expect(rotation.values[0]).toBeCloseTo(5 * Math.PI / 180);

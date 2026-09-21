@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { decodeBbPreview } from '@/lib/viewer-v2/codec';
 import { extractBbmodelPreview } from '@/lib/viewer-v2/extract';
 
+
+function readBlobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read blob.'));
+    reader.readAsText(blob);
+  });
+}
+
 function source(overrides: Record<string, unknown> = {}) {
   return {
     meta: { format_version: '5.0', model_format: 'java_block', box_uv: false },
@@ -52,7 +62,7 @@ describe('extractBbmodelPreview', () => {
       animations: 0,
     });
 
-    const preview = decodeBbPreview(await artifact.file.text());
+    const preview = decodeBbPreview(await readBlobText(artifact.file));
     expect(preview.metadata.meshCount).toBe(1);
     expect(preview.metadata.vertexCount).toBe(24);
     expect(preview.metadata.triangleCount).toBe(12);
@@ -93,7 +103,7 @@ describe('extractBbmodelPreview', () => {
       outliner: [{ uuid: 'group-1', children: ['cube-1'] }],
     });
     const artifact = await extractBbmodelPreview(bbmodel(value));
-    const preview = decodeBbPreview(await artifact.file.text());
+    const preview = decodeBbPreview(await readBlobText(artifact.file));
     expect(preview.bounds.min[0]).toBeCloseTo(0);
     expect(preview.bounds.max[0]).toBeCloseTo(16);
     expect(preview.bounds.min[1]).toBeCloseTo(0);

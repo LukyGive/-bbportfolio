@@ -36,7 +36,7 @@ function viewerDescriptor(size: number) {
 describe('ViewerStatus', () => {
   it('shows ready state and animation count', () => {
     render(<ViewerStatus creationId="abc" sourceFilename="model.bbmodel" status="ready" animationCount={4} onRegenerated={vi.fn()} />);
-    expect(screen.getByText(/3D viewer generated/i)).toBeInTheDocument();
+    expect(screen.getByText(/3D preview generated/i)).toBeInTheDocument();
     expect(screen.getByText(/4 animations/i)).toBeInTheDocument();
   });
 

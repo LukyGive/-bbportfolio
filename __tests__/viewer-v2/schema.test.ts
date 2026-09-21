@@ -4,6 +4,16 @@ import { assertMeshArrayLengths, assertTrackArrayLengths } from '@/lib/viewer-v2
 import { BBPREVIEW_LIMITS } from '@/lib/viewer-v2/schema';
 import type { BbPreview } from '@/lib/viewer-v2/schema';
 
+
+function readBlobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read blob.'));
+    reader.readAsText(blob);
+  });
+}
+
 const base: BbPreview = {
   version: 1,
   metadata: {
@@ -39,7 +49,7 @@ describe('bbpreview codec', () => {
   it('encodes the preview as JSON', async () => {
     const blob = encodeBbPreview(base);
     expect(blob.type).toBe('application/json');
-    expect(JSON.parse(await blob.text())).toEqual(base);
+    expect(JSON.parse(await readBlobText(blob))).toEqual(base);
   });
 
   it('rejects unsupported versions', () => {

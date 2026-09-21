@@ -360,7 +360,19 @@ export function parseSupportedBbmodel(text: string): SupportedBbmodel {
   };
 }
 
+async function readBlobText(blob: Blob): Promise<string> {
+  if (typeof blob.text === 'function') return blob.text();
+  if (typeof FileReader === 'undefined') throw new Error('This environment cannot read Blockbench source files.');
+
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read Blockbench source file.'));
+    reader.readAsText(blob);
+  });
+}
+
 export async function readSupportedBbmodel(file: File): Promise<SupportedBbmodel> {
   if (!/\.bbmodel$/i.test(file.name)) throw new Error('Blockbench source must use the .bbmodel extension.');
-  return parseSupportedBbmodel(await file.text());
+  return parseSupportedBbmodel(await readBlobText(file));
 }
