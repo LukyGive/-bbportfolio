@@ -17,7 +17,7 @@ function dataUriToBlob(source: PreviewTexture): Blob {
 
 async function createPreviewTexture(source: PreviewTexture): Promise<{ texture: THREE.Texture; bitmap: ImageBitmap }> {
   if (typeof createImageBitmap !== 'function') throw new Error('This browser cannot decode preview textures.');
-  const bitmap = await createImageBitmap(dataUriToBlob(source));
+  const bitmap = await createImageBitmap(dataUriToBlob(source), { imageOrientation: 'flipY' });
   const texture = new THREE.Texture(bitmap);
   texture.flipY = false;
   texture.colorSpace = THREE.SRGBColorSpace;

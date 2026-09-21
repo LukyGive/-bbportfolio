@@ -62,6 +62,32 @@ describe('buildPreviewScene', () => {
     built.dispose();
   });
 
+
+
+  it('decodes ImageBitmap textures with Blockbench-compatible vertical orientation', async () => {
+    const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
+    const createImageBitmapMock = vi.fn().mockResolvedValue(bitmap);
+    vi.stubGlobal('createImageBitmap', createImageBitmapMock);
+
+    const source = preview();
+    source.metadata.textureCount = 1;
+    source.textures = [{
+      id: 0,
+      mimeType: 'image/png',
+      width: 1,
+      height: 1,
+      data: 'data:image/png;base64,iVBORw0KGgo=',
+      pixelated: true,
+    }];
+    source.materials = [{ id: 0, textureId: 0, transparent: false }];
+
+    const built = await buildPreviewScene(source);
+    expect(createImageBitmapMock).toHaveBeenCalledTimes(1);
+    expect(createImageBitmapMock.mock.calls[0]?.[1]).toEqual({ imageOrientation: 'flipY' });
+    built.dispose();
+    vi.unstubAllGlobals();
+  });
+
   it('disposes geometry and shared materials exactly once', async () => {
     const built = await buildPreviewScene(preview());
     const arm = built.root.getObjectByName('bbv2-node-1');
