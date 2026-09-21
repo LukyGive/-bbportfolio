@@ -14,6 +14,7 @@ it('counts only supplied visible creations and omits zero categories', () => {
   ]);
 });
 
+it('reports an empty pack as zero models only', () => {
 it('reports an empty public pack as zero models only', () => {
   expect(getPackStats([])).toEqual([{ label: 'Models', count: 0 }]);
 });

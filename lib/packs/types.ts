@@ -25,4 +25,8 @@ export type PackInput = {
   orderedCreationIds: string[];
 };
 
+export type PackStat = {
+  label: string;
+  count: number;
+};
 export type PackStat = { label: string; count: number };

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/animated-3d-viewer
+      - feature/packs
   workflow_dispatch:
 
 jobs:

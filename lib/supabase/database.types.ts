@@ -126,6 +126,21 @@ export type Database = {
         Relationships: [];
       };
       pack_creations: {
+        Row: {
+          creation_id: string;
+          pack_id: string;
+          sort_order: number;
+        };
+        Insert: {
+          creation_id: string;
+          pack_id: string;
+          sort_order?: number;
+        };
+        Update: {
+          creation_id?: string;
+          pack_id?: string;
+          sort_order?: number;
+        };
         Row: { creation_id: string; pack_id: string; sort_order: number };
         Insert: { creation_id: string; pack_id: string; sort_order?: number };
         Update: { creation_id?: string; pack_id?: string; sort_order?: number };
