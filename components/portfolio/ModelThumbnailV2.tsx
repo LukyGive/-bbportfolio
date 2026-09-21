@@ -171,8 +171,8 @@ export function ModelThumbnailV2({ modelUrl, creationName }: Props) {
 
         camera.position.set(
           frame.center[0] + distance * 0.72,
-          frame.center[1] + distance * 0.4,
-          frame.center[2] + distance,
+          frame.center[1] + distance * 0.38,
+          frame.center[2] - distance,
         );
         camera.lookAt(...frame.center);
         camera.near = Math.max(distance / 1000, 0.001);

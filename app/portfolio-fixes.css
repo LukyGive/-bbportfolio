@@ -84,3 +84,39 @@
 .model-thumbnail-badge {
   display: none;
 }
+
+/* Detail viewer polish --------------------------------------------------- */
+/*
+ * Vorakh's authored front is on the -Z side. The TS viewer now opens from
+ * that side; this background gives the large preview the same Blockbench-like
+ * visual language as the creation cards without relying on pseudo-element
+ * stacking.
+ */
+.model-viewer-v2 {
+  background-color: #0f1217;
+  background-image:
+    linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px),
+    radial-gradient(circle at 50% 44%, rgba(255,255,255,.075), transparent 34%),
+    linear-gradient(180deg, rgba(255,255,255,.018), transparent 48%);
+  background-size: 22px 22px, 22px 22px, auto, auto;
+  background-position: center;
+}
+
+/* The sidebar being sticky is what makes the bottom of short creation pages
+ * look detached/broken while the left column reaches the end of the page. */
+.detail-sidebar {
+  position: static;
+  top: auto;
+  align-self: start;
+}
+
+/* A creation with no related work previously had no bottom breathing room;
+ * move that spacing to the page itself so both cases end consistently. */
+.detail-page {
+  padding-bottom: clamp(72px, 9vw, 128px);
+}
+
+.detail-related {
+  padding-bottom: 0;
+}

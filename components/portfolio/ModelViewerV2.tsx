@@ -173,10 +173,12 @@ export function ModelViewerV2({ modelUrl, creationName, fallbackImage }: Props) 
         const frame = boundsFrame(preview);
         const distance = cameraDistance(frame.radius, camera.fov);
         controls.target.set(...frame.center);
+        // Blockbench Generic Model uses -Z as the authored front for this portfolio.
+        // Position the initial camera on that side so bosses/NPCs open facing the visitor.
         camera.position.set(
-          frame.center[0] + distance * 0.75,
-          frame.center[1] + distance * 0.45,
-          frame.center[2] + distance,
+          frame.center[0] + distance * 0.72,
+          frame.center[1] + distance * 0.38,
+          frame.center[2] - distance,
         );
         camera.near = Math.max(distance / 1000, 0.001);
         camera.far = Math.max(distance * 20, 100);
