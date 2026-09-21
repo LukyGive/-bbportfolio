@@ -141,9 +141,6 @@ export type Database = {
           pack_id?: string;
           sort_order?: number;
         };
-        Row: { creation_id: string; pack_id: string; sort_order: number };
-        Insert: { creation_id: string; pack_id: string; sort_order?: number };
-        Update: { creation_id?: string; pack_id?: string; sort_order?: number };
         Relationships: [
           {
             foreignKeyName: 'pack_creations_creation_id_fkey';
