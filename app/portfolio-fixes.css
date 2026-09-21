@@ -1,0 +1,86 @@
+/*
+ * Portfolio follow-up fixes.
+ * Imported after globals.css so these rules intentionally override the
+ * generic grid-background rules added earlier without rewriting globals.css.
+ */
+
+/* The old `.creation-card-media > *` rule accidentally changed overlay UI
+ * from absolute to relative positioning. Restore the intended stacking. */
+.creation-card-media > .creation-card-overlay,
+.creation-card-media > .creation-card-arrow,
+.creation-card-media > .creation-card-tags,
+.creation-card-media > .model-thumbnail,
+.creation-card-media > .model-thumbnail-v2 {
+  position: absolute;
+}
+
+.creation-card-media > .creation-card-overlay,
+.creation-card-media > .model-thumbnail,
+.creation-card-media > .model-thumbnail-v2 {
+  inset: 0;
+}
+
+.creation-card-media > .creation-card-overlay { z-index: 2; }
+.creation-card-media > .model-thumbnail,
+.creation-card-media > .model-thumbnail-v2 { z-index: 1; }
+.creation-card-media > .creation-card-arrow,
+.creation-card-media > .creation-card-tags { z-index: 3; }
+
+/* Keep the subtle viewport/grid texture behind 3D previews. */
+.model-thumbnail,
+.model-thumbnail-v2 {
+  background-color: #0f1217;
+}
+
+.model-thumbnail-v2 {
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.model-thumbnail-v2::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px),
+    radial-gradient(circle at 78% 18%, rgba(255,255,255,.05), transparent 24%),
+    linear-gradient(180deg, rgba(255,255,255,.018), transparent 42%);
+  background-size: 18px 18px, 18px 18px, auto, auto;
+  opacity: .38;
+  z-index: 0;
+}
+
+.model-thumbnail-v2-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.model-thumbnail-v2-status {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  color: #737985;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-align: center;
+  pointer-events: none;
+}
+
+.model-thumbnail-v2[data-state='ready'] .model-thumbnail-v2-status {
+  display: none;
+}
+
+/* The BBMODEL badge was useful while debugging, but it competes with tags. */
+.model-thumbnail-badge {
+  display: none;
+}

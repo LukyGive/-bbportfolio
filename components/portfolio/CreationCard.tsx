@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import type { Creation } from '@/lib/creations/types';
 import { ModelThumbnail } from './ModelThumbnail';
+import { ModelThumbnailV2 } from './ModelThumbnailV2';
 
 type CreationCardProps = {
   creation: Creation;
@@ -12,11 +13,9 @@ const PLACEHOLDER = '/models/_placeholder/creation-placeholder.svg';
 
 export function CreationCard({ creation, priority = false }: CreationCardProps) {
   const tags = creation.tags.slice(0, 3);
-
-  const thumbnailViewer =
-    creation.viewer && creation.coverImage === PLACEHOLDER
-      ? creation.viewer
-      : null;
+  const useViewerThumbnail = Boolean(
+    creation.viewer && creation.coverImage === PLACEHOLDER,
+  );
 
   return (
     <Link
@@ -25,11 +24,18 @@ export function CreationCard({ creation, priority = false }: CreationCardProps) 
       aria-label={`View ${creation.name}`}
     >
       <div className="creation-card-media">
-        {thumbnailViewer ? (
-          <ModelThumbnail
-            modelUrl={thumbnailViewer.modelUrl}
-            creationName={creation.name}
-          />
+        {useViewerThumbnail && creation.viewer ? (
+          creation.viewer.format === 'bbpreview' ? (
+            <ModelThumbnailV2
+              modelUrl={creation.viewer.modelUrl}
+              creationName={creation.name}
+            />
+          ) : (
+            <ModelThumbnail
+              modelUrl={creation.viewer.modelUrl}
+              creationName={creation.name}
+            />
+          )
         ) : (
           <Image
             src={creation.coverImage}
@@ -41,15 +47,11 @@ export function CreationCard({ creation, priority = false }: CreationCardProps) 
         )}
 
         <div className="creation-card-overlay" />
-        <span className="creation-card-arrow" aria-hidden="true">
-          ↗
-        </span>
+        <span className="creation-card-arrow" aria-hidden="true">↗</span>
 
         {tags.length > 0 && (
           <div className="creation-card-tags" aria-label="Tags">
-            {tags.map((tag) => (
-              <span key={tag}>{tag}</span>
-            ))}
+            {tags.map((tag) => <span key={tag}>{tag}</span>)}
           </div>
         )}
       </div>

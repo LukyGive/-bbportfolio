@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { decodeBbPreview } from '@/lib/viewer-v2/codec';
 import { extractBbmodelPreview } from '@/lib/viewer-v2/extract';
 
-
 function readBlobText(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -27,6 +26,7 @@ function source(overrides: Record<string, unknown> = {}) {
     }],
     elements: [{
       uuid: 'cube-1',
+      type: 'cube',
       from: [0, 0, 0],
       to: [16, 16, 16],
       origin: [8, 8, 8],
@@ -67,6 +67,35 @@ describe('extractBbmodelPreview', () => {
     expect(preview.metadata.vertexCount).toBe(24);
     expect(preview.metadata.triangleCount).toBe(12);
     expect(preview.bounds).toEqual({ min: [0, 0, 0], max: [16, 16, 16] });
+  });
+
+  it('accepts cube-based Generic Model/free files and records generic_entity metadata', async () => {
+    const generic = source({
+      meta: { format_version: '5.0', model_format: 'free', box_uv: false },
+    });
+
+    const artifact = await extractBbmodelPreview(bbmodel(generic, 'boss.bbmodel'));
+    const preview = decodeBbPreview(await readBlobText(artifact.file));
+
+    expect(preview.metadata.sourceFormat).toBe('generic_entity');
+    expect(artifact.diagnostics.meshes).toBe(1);
+    expect(artifact.diagnostics.vertices).toBe(24);
+  });
+
+  it('rejects non-cube Generic Model elements instead of silently rendering bad geometry', async () => {
+    const genericWithMesh = source({
+      meta: { format_version: '5.0', model_format: 'free', box_uv: false },
+      elements: [{
+        uuid: 'mesh-1',
+        type: 'mesh',
+        vertices: {},
+        faces: {},
+      }],
+      outliner: [],
+    });
+
+    await expect(extractBbmodelPreview(bbmodel(genericWithMesh)))
+      .rejects.toThrow(/generic blockbench preview currently supports cube elements only/i);
   });
 
   it('preserves authored animation names in the artifact metadata', async () => {
