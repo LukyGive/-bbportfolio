@@ -48,4 +48,35 @@ test.describe('online admin', () => {
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByText(name)).toHaveCount(0);
   });
+
+  test('creates a pack from existing creations, publishes it, then deletes it', async ({ page }) => {
+    await login(page);
+    const name = `E2E Pack ${Date.now()}`;
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    await page.getByRole('button', { name: /^packs$/i }).click();
+    await page.getByRole('button', { name: /new pack/i }).click();
+    await page.getByLabel('Name').fill(name);
+
+    const addButtons = page.getByRole('button', { name: /add .*$/i });
+    await expect(addButtons.first()).toBeVisible();
+    await addButtons.first().click();
+
+    await page.getByRole('button', { name: /save pack/i }).click();
+    await page.waitForLoadState('domcontentloaded');
+    await page.getByRole('button', { name: /^packs$/i }).click();
+    await expect(page.getByText(name)).toBeVisible();
+
+    await page.goto(`/packs/${slug}`);
+    await expect(page.getByRole('heading', { name })).toBeVisible();
+    await expect(page.locator('.pack-hero canvas')).toHaveCount(0);
+
+    await page.goto('/admin');
+    await page.getByRole('button', { name: /^packs$/i }).click();
+    await page.getByRole('button', { name: `Delete ${name}` }).click();
+    await page.getByRole('button', { name: `Confirm delete ${name}` }).click();
+    await page.waitForLoadState('domcontentloaded');
+    await page.getByRole('button', { name: /^packs$/i }).click();
+    await expect(page.getByText(name)).toHaveCount(0);
+  });
 });

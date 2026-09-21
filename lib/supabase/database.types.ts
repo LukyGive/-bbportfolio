@@ -125,9 +125,68 @@ export type Database = {
         };
         Relationships: [];
       };
+      pack_creations: {
+        Row: { creation_id: string; pack_id: string; sort_order: number };
+        Insert: { creation_id: string; pack_id: string; sort_order?: number };
+        Update: { creation_id?: string; pack_id?: string; sort_order?: number };
+        Relationships: [
+          {
+            foreignKeyName: 'pack_creations_creation_id_fkey';
+            columns: ['creation_id'];
+            isOneToOne: false;
+            referencedRelation: 'creations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'pack_creations_pack_id_fkey';
+            columns: ['pack_id'];
+            isOneToOne: false;
+            referencedRelation: 'packs';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      packs: {
+        Row: {
+          cover_image_path: string | null;
+          created_at: string;
+          description: string;
+          id: string;
+          name: string;
+          published: boolean;
+          slug: string;
+          updated_at: string;
+        };
+        Insert: {
+          cover_image_path?: string | null;
+          created_at?: string;
+          description?: string;
+          id?: string;
+          name: string;
+          published?: boolean;
+          slug: string;
+          updated_at?: string;
+        };
+        Update: {
+          cover_image_path?: string | null;
+          created_at?: string;
+          description?: string;
+          id?: string;
+          name?: string;
+          published?: boolean;
+          slug?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      replace_pack_creations: {
+        Args: { target_pack_id: string; ordered_creation_ids: string[] };
+        Returns: undefined;
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

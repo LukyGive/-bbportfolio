@@ -27,6 +27,10 @@ export type CreationUploads = {
   viewer?: UploadedViewerRef & { animationNames: string[] };
 };
 
+export type PackUploads = {
+  cover?: UploadedRenderRef;
+};
+
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_BBMODEL_BYTES = 50 * 1024 * 1024;
 const MAX_VIEWER_BYTES = 50 * 1024 * 1024;
