@@ -33,7 +33,8 @@ const MAX_VIEWER_BYTES = 50 * 1024 * 1024;
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/avif']);
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'avif']);
 const BBMODEL_TYPES = new Set(['application/json', 'application/octet-stream', 'text/plain']);
-const VIEWER_TYPES = new Set(['model/gltf-binary', 'application/octet-stream']);
+const LEGACY_VIEWER_TYPES = new Set(['model/gltf-binary', 'application/octet-stream']);
+const PREVIEW_VIEWER_TYPES = new Set(['application/json', 'application/octet-stream']);
 const UUID_SOURCE = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 
 function leafName(name: string): string {
@@ -84,9 +85,14 @@ export function validateUploadRequestFile(file: UploadRequestFile): void {
   }
 
   if (file.kind === 'viewer') {
-    if (!/\.glb$/i.test(leafName(file.filename))) throw new Error('Viewer model must use .glb.');
-    if (!VIEWER_TYPES.has(file.contentType)) throw new Error('Invalid viewer content type.');
-    if (file.size > MAX_VIEWER_BYTES) throw new Error('The viewer GLB must be 50 MiB or smaller.');
+    const ext = extension(file.filename);
+    const isLegacyGlb = ext === 'glb' && LEGACY_VIEWER_TYPES.has(file.contentType);
+    const isBbPreview = ext === 'bbpreview' && PREVIEW_VIEWER_TYPES.has(file.contentType);
+    if (!isLegacyGlb && !isBbPreview) {
+      if (ext !== 'glb' && ext !== 'bbpreview') throw new Error('Viewer file must use .glb or .bbpreview.');
+      throw new Error('Invalid viewer content type.');
+    }
+    if (file.size > MAX_VIEWER_BYTES) throw new Error('The viewer file must be 50 MiB or smaller.');
     return;
   }
 
@@ -101,7 +107,7 @@ export function validateUploadedAssetRef(userId: string, ref: UploadedAssetRef):
   const expectedExtension = ref.kind === 'bbmodel'
     ? 'bbmodel'
     : ref.kind === 'viewer'
-      ? 'glb'
+      ? extension(ref.filename)
       : extension(ref.filename) === 'jpeg' ? 'jpg' : extension(ref.filename);
 
   const suffix = ref.kind === 'bbmodel'

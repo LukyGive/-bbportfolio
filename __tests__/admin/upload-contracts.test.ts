@@ -18,6 +18,37 @@ describe('upload contracts', () => {
     })).not.toThrow();
   });
 
+
+  it('accepts a Viewer V2 bbpreview request while preserving legacy GLB support', () => {
+    expect(() => validateUploadRequestFile({
+      clientKey: 'viewer',
+      kind: 'viewer',
+      filename: 'preview.bbpreview',
+      size: 2048,
+      contentType: 'application/json',
+    })).not.toThrow();
+
+    expect(() => validateUploadRequestFile({
+      clientKey: 'viewer',
+      kind: 'viewer',
+      filename: 'model.glb',
+      size: 2048,
+      contentType: 'model/gltf-binary',
+    })).not.toThrow();
+  });
+
+  it('accepts an admin-scoped bbpreview asset path', () => {
+    expect(() => validateUploadedAssetRef(userId, {
+      clientKey: 'viewer',
+      kind: 'viewer',
+      bucket: 'viewer-models',
+      path: `uploads/${userId}/${sessionId}/33333333-3333-4333-8333-333333333333.bbpreview`,
+      filename: 'preview.bbpreview',
+      size: 2048,
+      contentType: 'application/json',
+    })).not.toThrow();
+  });
+
   it('rejects mismatched MIME types for viewer and private source uploads', () => {
     expect(() => validateUploadRequestFile({
       clientKey: 'viewer', kind: 'viewer', filename: 'model.glb', size: 10, contentType: 'text/plain',

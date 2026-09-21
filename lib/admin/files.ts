@@ -50,9 +50,13 @@ export function validateBbmodelFile(file: Pick<File, 'name' | 'size'>): void {
 }
 
 export function validateViewerFile(file: Pick<File, 'name' | 'type' | 'size'>): void {
-  if (!/\.glb$/i.test(leafName(file.name))) throw new Error('Viewer model must use the .glb extension.');
-  if (file.size <= 0) throw new Error('The viewer GLB is empty.');
-  if (file.size > MAX_VIEWER_BYTES) throw new Error('The viewer GLB must be 50 MB or smaller.');
+  const extension = viewerExtension(file.name);
+  const validType = extension === 'glb'
+    ? file.type === 'model/gltf-binary' || file.type === 'application/octet-stream' || file.type === ''
+    : file.type === 'application/json' || file.type === 'application/octet-stream' || file.type === '';
+  if (!validType) throw new Error('Invalid viewer content type.');
+  if (file.size <= 0) throw new Error('The viewer file is empty.');
+  if (file.size > MAX_VIEWER_BYTES) throw new Error('The viewer file must be 50 MB or smaller.');
 }
 
 export function validateImageFile(file: Pick<File, 'name' | 'type' | 'size'>): void {
@@ -76,6 +80,12 @@ function imageExtension(name: string): string {
   return extension === 'jpeg' ? 'jpg' : extension;
 }
 
+function viewerExtension(name: string): 'glb' | 'bbpreview' {
+  const extension = leafName(name).split('.').pop()?.toLowerCase() ?? '';
+  if (extension === 'glb' || extension === 'bbpreview') return extension;
+  throw new Error('Viewer file must use .glb or .bbpreview.');
+}
+
 
 function assertUuid(value: string, label: string): void {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
@@ -97,7 +107,7 @@ export function createAuthorizedObjectPath(
     return `uploads/${userId}/${sessionId}/${id}-${safeBbmodelFilename(request.filename)}`;
   }
   if (request.kind === 'viewer') {
-    return `uploads/${userId}/${sessionId}/${id}.glb`;
+    return `uploads/${userId}/${sessionId}/${id}.${viewerExtension(request.filename)}`;
   }
   const extension = imageExtension(request.filename);
   return `uploads/${userId}/${sessionId}/${id}.${extension}`;
@@ -119,7 +129,7 @@ export async function authorizeUploadBatch(
     throw new Error('Only one .bbmodel can be uploaded at once.');
   }
   if (requests.filter((item) => item.kind === 'viewer').length > 1) {
-    throw new Error('Only one viewer GLB can be uploaded at once.');
+    throw new Error('Only one viewer file can be uploaded at once.');
   }
 
   requests.forEach(validateUploadRequestFile);
@@ -244,8 +254,8 @@ export async function verifyCreationUploads(
   uploads: import('./upload-contracts').CreationUploads,
 ): Promise<void> {
   if (uploads.renders.length > 20) throw new Error('A maximum of 20 renders can be uploaded at once.');
-  if (uploads.bbmodel && !uploads.viewer) throw new Error('A generated viewer GLB is required with a .bbmodel source.');
-  if (uploads.viewer && !uploads.bbmodel) throw new Error('Viewer GLB cannot be attached without a .bbmodel source.');
+  if (uploads.bbmodel && !uploads.viewer) throw new Error('A generated viewer preview is required with a .bbmodel source.');
+  if (uploads.viewer && !uploads.bbmodel) throw new Error('Viewer preview cannot be attached without a .bbmodel source.');
 
   for (const render of uploads.renders) await verifyUploadedObject(client, userId, render);
   if (uploads.bbmodel) await verifyUploadedObject(client, userId, uploads.bbmodel);

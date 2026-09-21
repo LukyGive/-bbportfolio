@@ -39,7 +39,7 @@ function splitList(value: string): string[] {
 
 function stageErrorMessage(stage: SaveStage, caught: unknown): string {
   const message = caught instanceof Error ? caught.message : 'Could not save this creation.';
-  if (stage === 'converting') return `3D conversion failed: ${message}`;
+  if (stage === 'converting') return `3D preview generation failed: ${message}`;
   if (stage === 'preparing') return `Could not prepare uploads: ${message}`;
   if (stage === 'uploading-source') return `Source upload failed: ${message}`;
   if (stage === 'uploading-viewer') return `Viewer upload failed: ${message}`;
@@ -49,7 +49,7 @@ function stageErrorMessage(stage: SaveStage, caught: unknown): string {
 
 function saveLabel(stage: SaveStage, progress: number | null, saving: boolean): string {
   const percent = progress === null ? '' : ` ${progress}%`;
-  if (stage === 'converting') return 'Converting 3D…';
+  if (stage === 'converting') return 'Generating 3D preview…';
   if (stage === 'preparing') return 'Preparing upload…';
   if (stage === 'uploading-source') return `Uploading source…${percent}`;
   if (stage === 'uploading-viewer') return `Uploading viewer…${percent}`;
@@ -132,11 +132,11 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
     let finalizationStarted = false;
 
     try {
-      let viewerArtifact: Awaited<ReturnType<typeof import('@/lib/viewer/convert')['convertBbmodelToViewer']>> | undefined;
+      let viewerArtifact: Awaited<ReturnType<typeof import('@/lib/viewer-v2/extract')['extractBbmodelPreview']>> | undefined;
       if (bbmodel) {
         setStage('converting');
-        const { convertBbmodelToViewer } = await import('@/lib/viewer/convert');
-        viewerArtifact = await convertBbmodelToViewer(bbmodel);
+        const { extractBbmodelPreview } = await import('@/lib/viewer-v2/extract');
+        viewerArtifact = await extractBbmodelPreview(bbmodel);
       }
 
       const fileByKey = new Map<string, File>();
@@ -172,7 +172,7 @@ export function CreationEditor({ creation, categories, onSaved, onCancel }: Prop
           kind: 'viewer',
           filename: viewerArtifact.file.name,
           size: viewerArtifact.file.size,
-          contentType: 'model/gltf-binary',
+          contentType: viewerArtifact.file.type || 'application/json',
         });
       }
 

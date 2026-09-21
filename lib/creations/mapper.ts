@@ -58,6 +58,7 @@ export function mapPublicCreation(row: CreationRowWithImages, baseUrl?: string):
       viewer: {
         modelUrl: publicViewerUrl(row.viewer_model_path, baseUrl),
         animationNames: [...row.viewer_animation_names],
+        format: row.viewer_model_path.toLowerCase().endsWith('.bbpreview') ? 'bbpreview' : 'glb',
       },
     } : {}),
   };
