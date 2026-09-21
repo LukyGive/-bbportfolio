@@ -11,6 +11,7 @@ describe('pack collections migration', () => {
     expect(sql).toMatch(/pack_id uuid not null references public\.packs\(id\) on delete cascade/i);
     expect(sql).toMatch(/creation_id uuid not null references public\.creations\(id\) on delete cascade/i);
     expect(sql).toMatch(/primary key \(pack_id, creation_id\)/i);
+    expect(sql).not.toMatch(/unique\s*\(creation_id\)/i);
     expect(sql).toMatch(/sort_order integer not null default 0 check \(sort_order >= 0\)/i);
   });
 

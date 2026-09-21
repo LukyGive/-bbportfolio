@@ -29,3 +29,4 @@ export type PackStat = {
   label: string;
   count: number;
 };
+export type PackStat = { label: string; count: number };

@@ -143,6 +143,49 @@ using (
     where au.user_id = (select auth.uid())
   )
 );
+on public.packs for select to anon, authenticated
+using (published = true);
+
+create policy "admin can read all packs"
+on public.packs for select to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+create policy "admin can insert packs"
+on public.packs for insert to authenticated
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+create policy "admin can update packs"
+on public.packs for update to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())))
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+create policy "admin can delete packs"
+on public.packs for delete to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+create policy "published pack creations are public"
+on public.pack_creations for select to anon, authenticated
+using (
+  exists (select 1 from public.packs p where p.id = pack_id and p.published = true)
+  and exists (select 1 from public.creations c where c.id = creation_id and c.published = true)
+);
+
+create policy "admin can read all pack creations"
+on public.pack_creations for select to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+create policy "admin can insert pack creations"
+on public.pack_creations for insert to authenticated
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+create policy "admin can update pack creations"
+on public.pack_creations for update to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())))
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+create policy "admin can delete pack creations"
+on public.pack_creations for delete to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
 
 create or replace function public.replace_pack_creations(
   target_pack_id uuid,
@@ -164,6 +207,7 @@ begin
 
   delete from public.pack_creations
   where pack_id = target_pack_id;
+  delete from public.pack_creations where pack_id = target_pack_id;
 
   insert into public.pack_creations (pack_id, creation_id, sort_order)
   select target_pack_id, member.creation_id, (member.ordinality - 1)::integer

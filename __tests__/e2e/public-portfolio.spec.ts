@@ -23,6 +23,22 @@ test('public portfolio browsing works without admin access', async ({ page }) =>
   expect(missing?.status()).toBe(404);
 });
 
+test('pack archive and detail are public portfolio routes', async ({ page }) => {
+  await page.goto('/packs');
+  await expect(page.getByRole('heading', { name: 'Packs' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Packs', exact: true })).toBeVisible();
+
+  const firstPack = page.locator('.pack-card').first();
+  if (await firstPack.count()) {
+    await firstPack.click();
+    await expect(page.getByText('Included creations')).toBeVisible();
+    await expect(page.locator('.pack-hero canvas')).toHaveCount(0);
+  }
+
+  const missing = await page.goto('/packs/definitely-not-a-real-pack');
+  expect(missing?.status()).toBe(404);
+});
+
 test('signed-out admin redirects to login', async ({ page }) => {
   await page.goto('/admin');
   await expect(page).toHaveURL(/\/admin\/login$/);
@@ -32,6 +48,13 @@ test('signed-out admin redirects to login', async ({ page }) => {
 test('mobile layout has no horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto('/creations');
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  expect(overflow).toBe(false);
+});
+
+test('packs have no horizontal overflow at 320px', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto('/packs');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(overflow).toBe(false);
 });

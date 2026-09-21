@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Header } from '@/components/portfolio/Header';
 import './globals.css';
 import './portfolio-fixes.css';
+import './packs.css';
 
 export const metadata: Metadata = {
   title: {
