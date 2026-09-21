@@ -1,5 +1,6 @@
 import type { AnimationClip, BufferGeometry, Object3D, SkinnedMesh } from 'three';
 import { normalizeViewerAnimationNames } from './animation';
+import { compactMaterialGroups } from './groups';
 
 const MAX_BBMODEL_BYTES = 50 * 1024 * 1024;
 const MAX_VIEWER_BYTES = 50 * 1024 * 1024;
@@ -88,28 +89,51 @@ async function compactSkinnedMeshes(scene: Object3D): Promise<BufferGeometry | u
     throw new Error('Could not compact Blockbench geometry for the web viewer.');
   }
 
+  // The Blockbench parser creates face-level geometry groups. Keeping those
+  // groups after merging can turn a simple model into thousands of WebGL draw
+  // calls. With a single material, groups are unnecessary. With multiple
+  // materials, only contiguous ranges with a different material need to stay.
   mergedGeometry.clearGroups();
+  let mergedMaterial = first.material;
 
-  let primitiveOffset = 0;
-  for (const geometry of geometries) {
-    const primitiveCount = geometryPrimitiveCount(geometry);
+  if (Array.isArray(first.material)) {
+    const candidateGroups: Array<{ start: number; count: number; materialIndex: number }> = [];
+    let primitiveOffset = 0;
 
-    if (geometry.groups.length > 0) {
-      for (const group of geometry.groups) {
-        const start = primitiveOffset + group.start;
-        const count = Math.min(group.count, Math.max(0, primitiveCount - group.start));
-        if (count > 0) {
-          mergedGeometry.addGroup(start, count, group.materialIndex ?? 0);
+    for (const geometry of geometries) {
+      const primitiveCount = geometryPrimitiveCount(geometry);
+
+      if (geometry.groups.length > 0) {
+        for (const group of geometry.groups) {
+          const start = primitiveOffset + group.start;
+          const count = Math.min(group.count, Math.max(0, primitiveCount - group.start));
+          if (count > 0) {
+            candidateGroups.push({
+              start,
+              count,
+              materialIndex: group.materialIndex ?? 0,
+            });
+          }
         }
+      } else if (primitiveCount > 0) {
+        candidateGroups.push({ start: primitiveOffset, count: primitiveCount, materialIndex: 0 });
       }
-    } else if (primitiveCount > 0) {
-      mergedGeometry.addGroup(primitiveOffset, primitiveCount, 0);
+
+      primitiveOffset += primitiveCount;
     }
 
-    primitiveOffset += primitiveCount;
+    const plan = compactMaterialGroups(candidateGroups);
+    if (plan.singleMaterialIndex !== undefined) {
+      const singleMaterial = first.material[plan.singleMaterialIndex] ?? first.material[0];
+      if (singleMaterial) mergedMaterial = singleMaterial;
+    } else {
+      for (const group of plan.groups) {
+        mergedGeometry.addGroup(group.start, group.count, group.materialIndex);
+      }
+    }
   }
 
-  const mergedMesh = new THREE.SkinnedMesh(mergedGeometry, first.material);
+  const mergedMesh = new THREE.SkinnedMesh(mergedGeometry, mergedMaterial);
   mergedMesh.name = 'viewer-model';
   mergedMesh.bindMode = first.bindMode;
   mergedMesh.bind(first.skeleton, first.bindMatrix.clone());
