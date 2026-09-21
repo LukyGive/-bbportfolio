@@ -266,3 +266,36 @@ img { max-width: 100%; }
 .admin-image-actions .text-link { min-width: 2rem; }
 .text-link.danger { color: #f08d8d; }
 .admin-cover-choice { margin-top: .8rem; }
+
+.creation-card-media,
+.detail-image,
+.model-thumbnail,
+.model-viewer {
+  background-color: #0f1217;
+}
+
+.creation-card-media::before,
+.detail-image::before,
+.model-thumbnail::before,
+.model-viewer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px),
+    radial-gradient(circle at 78% 18%, rgba(255,255,255,.05), transparent 24%),
+    linear-gradient(180deg, rgba(255,255,255,.018), transparent 42%);
+  background-size: 18px 18px, 18px 18px, auto, auto;
+  opacity: .38;
+  z-index: 0;
+}
+
+.creation-card-media > *,
+.detail-image > *,
+.model-thumbnail > *,
+.model-viewer > * {
+  position: relative;
+  z-index: 1;
+}
