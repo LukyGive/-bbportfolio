@@ -3,6 +3,7 @@ name: Viewer CI
 on:
   push:
     branches:
+      - main
       - feature/animated-3d-viewer
       - feature/packs
   workflow_dispatch:
