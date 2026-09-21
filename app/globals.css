@@ -313,3 +313,44 @@ img { max-width: 100%; }
   object-fit: cover;
   transition: transform .55s cubic-bezier(.2,.75,.25,1), filter .4s ease;
 }
+
+.model-thumbnail {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.model-thumbnail-canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  position: relative;
+  z-index: 1;
+}
+
+.model-thumbnail-badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(9,10,13,.72);
+  border: 1px solid var(--border);
+  color: #d5d8df;
+  font-size: 10px;
+  letter-spacing: .1em;
+  backdrop-filter: blur(8px);
+}
+
+.model-thumbnail-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  text-align: center;
+  color: var(--soft);
+  font-size: 12px;
+}
